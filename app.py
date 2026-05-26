@@ -575,10 +575,9 @@ def load_energy_data():
     np.random.seed(42)
     dates = pd.date_range("2025-02-01", "2026-05-01", freq="D")
     n = len(dates)
-    war_idx  = (dates >= "2026-02-28").astype(int).values
-    war_days = np.maximum(0, (dates - pd.Timestamp("2026-02-28")).days.to_numpy().astype(float))
-
-    # WTI: 전쟁 전 55~70, 전쟁 후 급등 → 95~113
+    _war_ts  = pd.Timestamp("2026-02-28")
+    war_idx  = np.array([1.0 if d >= _war_ts else 0.0 for d in dates])
+    war_days = np.array([float((d - _war_ts).days) if d >= _war_ts else 0.0 for d in dates])
     wti_base = 62 + np.cumsum(np.random.randn(n) * 0.8)
     wti_war_shock = war_idx * np.clip(war_days * 0.3, 0, 45)
     wti = np.clip(wti_base + wti_war_shock + np.random.randn(n) * 1.2, 55, 113)
@@ -749,8 +748,9 @@ def build_tcs_timeseries():
     np.random.seed(1)
     dates = pd.date_range("2025-01-01", "2026-05-17", freq="D")
     n = len(dates)
-    war_idx  = (dates >= "2026-02-28").astype(int).values
-    war_days = np.maximum(0, (dates - pd.Timestamp("2026-02-28")).days.to_numpy().astype(float))
+    _war_ts  = pd.Timestamp("2026-02-28")
+    war_idx  = np.array([1.0 if d >= _war_ts else 0.0 for d in dates])
+    war_days = np.array([float((d - _war_ts).days) if d >= _war_ts else 0.0 for d in dates])
 
     weekday_factor = np.array([1.15,1.18,1.20,1.18,1.12,0.62,0.45])
     wf = np.array([weekday_factor[d.weekday()] for d in dates])
