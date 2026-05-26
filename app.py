@@ -8,7 +8,6 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import pydeck as pdk
 from datetime import datetime, timedelta
 import warnings, time, json, os
 warnings.filterwarnings("ignore")
@@ -1154,200 +1153,234 @@ def chart_impact_scatter(impact_df):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  GIS 지도 레이어 (pydeck)
+#  GIS 지도 레이어 — Plotly 2D (pydeck 불필요)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MAPBOX_STYLE = "mapbox://styles/mapbox/dark-v11"
-
-GRADE_COLORS = {
-    "Very High": [240, 82, 82, 230],
-    "High":      [232, 165, 48, 200],
-    "Moderate":  [52, 199, 123, 160],
-    "Low":       [91, 106, 240, 130],
+_GRADE_COLOR = {
+    "Very High": "#f05252",
+    "High":      "#e8a530",
+    "Moderate":  "#34c77b",
+    "Low":       "#5b6af0",
 }
-LISA_COLORS = {
-    "High-High":      [240, 82, 82, 230],
-    "Low-Low":        [91, 106, 240, 210],
-    "High-Low":       [232, 165, 48, 200],
-    "Low-High":       [103, 191, 255, 170],
-    "Not Significant":[78, 84, 104, 120],
+_LISA_COLOR = {
+    "High-High":      "#f05252",
+    "Low-Low":        "#5b6af0",
+    "High-Low":       "#e8a530",
+    "Low-High":       "#67bfff",
+    "Not Significant":"#4e5468",
 }
+_MAP_LAYOUT = dict(
+    paper_bgcolor="#08090c",
+    plot_bgcolor="#08090c",
+    font=dict(family="DM Sans", color="#8b91a8", size=11),
+    margin=dict(l=0, r=0, t=0, b=0),
+    height=540,
+    legend=dict(
+        bgcolor="rgba(13,16,22,0.85)",
+        bordercolor="#1c1e27", borderwidth=1,
+        font=dict(size=11, color="#f0f2f8"),
+        x=0.01, y=0.99, xanchor="left", yanchor="top",
+    ),
+    geo=dict(
+        bgcolor="#08090c",
+        showland=True, landcolor="#0e1016",
+        showocean=True, oceancolor="#08090c",
+        showlakes=True, lakecolor="#0d1420",
+        showcountries=True, countrycolor="#1c1e27",
+        showcoastlines=True, coastlinecolor="#1c1e27",
+        showsubunits=True, subunitcolor="#1a1c26",
+        projection_type="mercator",
+        center=dict(lat=36.5, lon=127.8),
+        lataxis_range=[33.5, 38.8],
+        lonaxis_range=[124.5, 131.0],
+    ),
+)
 
 
-def make_vulnerability_map(impact_df, selected_routes=None, map_mode="impact"):
+def make_gis_map(impact_df, selected_routes=None, map_mode="impact"):
+    """Plotly scattergeo 기반 2D 지도 (pydeck 불필요)"""
     df = impact_df.copy()
     if selected_routes:
         df = df[df["routeName"].isin(selected_routes)]
 
+    # ── 컬럼 선택 ──
     if map_mode == "impact":
-        df["color"] = df["impact_grade"].map(GRADE_COLORS)
-        df["radius"] = (df["impact_score_mean"] / df["impact_score_mean"].max() * 12000 + 3000).clip(3000, 18000)
-        col_field = "impact_score_mean"
+        grade_col = "impact_grade"
+        score_col = "impact_score_mean"
+        color_map = _GRADE_COLOR
+        label_col = "충격점수"
+        df["_score_disp"] = df[score_col].round(4)
     elif map_mode == "vulnerability":
-        df["color"] = df["vulnerability_grade"].map(GRADE_COLORS)
-        df["radius"] = (df["vulnerability_score"] / df["vulnerability_score"].max() * 12000 + 3000).clip(3000, 18000)
-        col_field = "vulnerability_score"
-    else:  # LISA
-        df["color"] = df["lisa_cluster"].map(LISA_COLORS)
-        df["radius"] = 6000
-        col_field = "vulnerability_score"
+        grade_col = "vulnerability_grade"
+        score_col = "vulnerability_score"
+        color_map = _GRADE_COLOR
+        label_col = "취약성점수"
+        df["_score_disp"] = df[score_col].round(4)
+    else:  # lisa
+        grade_col = "lisa_cluster"
+        score_col = "vulnerability_score"
+        color_map = _LISA_COLOR
+        label_col = "LISA"
+        df["_score_disp"] = df["lisa_cluster"]
 
-    scatter_layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=df,
-        get_position=["lon", "lat"],
-        get_radius="radius",
-        get_fill_color="color",
-        get_line_color=[30, 36, 43, 200],
-        line_width_min_pixels=1,
-        pickable=True,
-        auto_highlight=True,
-        highlight_color=[255, 255, 255, 80],
+    # 마커 크기: 점수 비례 (8~22px)
+    if map_mode != "lisa":
+        s_min = df[score_col].min(); s_max = df[score_col].max()
+        df["_msize"] = ((df[score_col] - s_min) / (s_max - s_min + 1e-9) * 14 + 7).clip(7, 22)
+    else:
+        df["_msize"] = 10
+
+    df["_color"] = df[grade_col].map(color_map).fillna("#4e5468")
+
+    # hover text
+    df["_hover"] = (
+        "<b>" + df["unitName"] + "</b><br>" +
+        df["routeName"] + "<br>" +
+        label_col + ": <b>" + df["_score_disp"].astype(str) + "</b><br>" +
+        "화물비율: " + (df["mean_freight_share"] * 100).round(1).astype(str) + "%<br>" +
+        "LISA: " + df["lisa_cluster"]
     )
 
-    # 상위 10개 영업소 강조 레이어
-    top10 = df.nlargest(10, col_field)
-    ring_layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=top10,
-        get_position=["lon", "lat"],
-        get_radius=15000,
-        get_fill_color=[0, 0, 0, 0],
-        get_line_color=[248, 81, 73, 255],
-        line_width_min_pixels=2.5,
-        stroked=True,
-        filled=False,
-        pickable=False,
-    )
+    fig = go.Figure()
 
-    # 텍스트 레이어 (상위 10개 이름)
-    text_layer = pdk.Layer(
-        "TextLayer",
-        data=top10,
-        get_position=["lon", "lat"],
-        get_text="unitName",
-        get_size=12,
-        get_color=[230, 237, 243, 230],
-        get_alignment_baseline="'bottom'",
-        get_pixel_offset=[0, -18],
-        font_family="Noto Sans KR",
-    )
+    # ── 등급별 레이어 ──
+    for grade in df[grade_col].dropna().unique():
+        gdf = df[df[grade_col] == grade]
+        fig.add_trace(go.Scattergeo(
+            lat=gdf["lat"], lon=gdf["lon"],
+            mode="markers",
+            name=str(grade),
+            marker=dict(
+                size=gdf["_msize"],
+                color=color_map.get(grade, "#4e5468"),
+                opacity=0.85,
+                line=dict(width=0.5, color="#08090c"),
+            ),
+            text=gdf["_hover"],
+            hovertemplate="%{text}<extra></extra>",
+            customdata=gdf[["unitName","routeName","vulnerability_score","impact_score_mean"]].values,
+        ))
 
-    view_state = pdk.ViewState(
-        latitude=36.5, longitude=127.8,
-        zoom=6.2, pitch=30, bearing=0
-    )
+    # ── 상위 10개 영업소 링 강조 ──
+    top10 = df.nlargest(10, score_col)
+    fig.add_trace(go.Scattergeo(
+        lat=top10["lat"], lon=top10["lon"],
+        mode="markers+text",
+        name="Top 10",
+        marker=dict(
+            size=top10["_msize"] + 8,
+            color="rgba(0,0,0,0)",
+            line=dict(width=2, color="#f05252"),
+        ),
+        text=top10["unitName"],
+        textposition="top center",
+        textfont=dict(size=10, color="#f0f2f8"),
+        hoverinfo="skip",
+    ))
 
-    tooltip = {
-        "html": """
-        <div style='background:#161b22;border:1px solid #30363d;border-radius:8px;
-                    padding:10px 14px;font-family:sans-serif;min-width:200px'>
-          <div style='font-size:14px;font-weight:700;color:#e6edf3;margin-bottom:6px'>
-            {unitName}
-          </div>
-          <div style='font-size:11px;color:#8b949e;margin-bottom:8px'>{routeName}</div>
-          <div style='display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px'>
-            <span style='color:#8b949e'>취약성 점수</span>
-            <span style='color:#58a6ff;font-family:monospace'>{vulnerability_score}</span>
-            <span style='color:#8b949e'>충격 점수</span>
-            <span style='color:#f0883e;font-family:monospace'>{impact_score_mean}</span>
-            <span style='color:#8b949e'>화물 비율</span>
-            <span style='color:#e6edf3;font-family:monospace'>{mean_freight_share}</span>
-            <span style='color:#8b949e'>LISA 클러스터</span>
-            <span style='color:#bc8cff;font-family:monospace'>{lisa_cluster}</span>
-          </div>
-        </div>
-        """,
-        "style": {"background": "transparent", "border": "none"},
-    }
-
-    deck = pdk.Deck(
-        layers=[scatter_layer, ring_layer, text_layer],
-        initial_view_state=view_state,
-        map_style=MAPBOX_STYLE,
-        tooltip=tooltip,
-    )
-    return deck
+    fig.update_layout(**_MAP_LAYOUT)
+    return fig
 
 
-def make_heatmap(impact_df):
-    """Heatmap 레이어 (화물 집중도)"""
+def make_heatmap_map(impact_df):
+    """밀도 기반 heatmap — densitymapbox 대신 scattergeo opacity 활용"""
     df = impact_df.copy()
-    df["weight"] = df["impact_score_mean"] / df["impact_score_mean"].max()
+    w = df["impact_score_mean"] / df["impact_score_mean"].max()
 
-    heat_layer = pdk.Layer(
-        "HeatmapLayer",
-        data=df,
-        get_position=["lon", "lat"],
-        get_weight="weight",
-        aggregation="SUM",
-        radiusPixels=60,
-        intensity=1.2,
-        threshold=0.1,
-        color_range=[
-            [1, 152, 189, 180], [73, 227, 206, 200],
-            [216, 254, 181, 200], [254, 237, 177, 200],
-            [254, 173, 84, 220], [209, 55, 78, 240],
-        ],
-    )
+    fig = go.Figure()
+    fig.add_trace(go.Scattergeo(
+        lat=df["lat"], lon=df["lon"],
+        mode="markers",
+        name="화물 집중도",
+        marker=dict(
+            size=(w * 28 + 4).clip(4, 32),
+            color=df["impact_score_mean"],
+            colorscale=[
+                [0.0,  "#0d1420"],
+                [0.25, "#1a4a6e"],
+                [0.5,  "#1e90a0"],
+                [0.75, "#e8a530"],
+                [1.0,  "#f05252"],
+            ],
+            opacity=0.7,
+            showscale=True,
+            colorbar=dict(
+                title=dict(text="Impact", font=dict(size=10, color="#8b91a8")),
+                thickness=10, len=0.5,
+                tickfont=dict(size=9, color="#8b91a8"),
+                bgcolor="rgba(13,16,22,0.8)",
+                bordercolor="#1c1e27", borderwidth=1,
+                x=1.01,
+            ),
+            line=dict(width=0),
+        ),
+        text=df["unitName"] + "<br>" + df["routeName"],
+        hovertemplate="%{text}<extra></extra>",
+    ))
+    fig.update_layout(**_MAP_LAYOUT)
+    return fig
 
-    view_state = pdk.ViewState(
-        latitude=36.5, longitude=127.8, zoom=6.2, pitch=0
-    )
-    return pdk.Deck(
-        layers=[heat_layer],
-        initial_view_state=view_state,
-        map_style=MAPBOX_STYLE,
-    )
 
-
-def make_arc_map(impact_df):
-    """Arc 레이어 — 고위험 영업소 간 위험 연계 시각화"""
-    hh = impact_df[impact_df["lisa_cluster"]=="High-High"].copy()
+def make_arc_map2d(impact_df):
+    """HH 클러스터 연계 — 중심점 → 각 HH 영업소 선"""
+    hh = impact_df[impact_df["lisa_cluster"] == "High-High"].copy()
     if len(hh) < 2:
-        return make_heatmap(impact_df)
+        return make_heatmap_map(impact_df)
 
-    center_lat = hh["lat"].mean()
-    center_lon = hh["lon"].mean()
+    cx, cy = hh["lon"].mean(), hh["lat"].mean()
+    fig = go.Figure()
 
-    arcs = []
+    # 연결선
     for _, row in hh.iterrows():
-        score = row["impact_score_mean"]
-        arcs.append({
-            "s_lat": center_lat, "s_lon": center_lon,
-            "t_lat": row["lat"],  "t_lon": row["lon"],
-            "score": score,
-        })
+        fig.add_trace(go.Scattergeo(
+            lat=[cy, row["lat"], None],
+            lon=[cx, row["lon"], None],
+            mode="lines",
+            line=dict(width=1.2, color="rgba(240,82,82,0.35)"),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
 
-    arc_df = pd.DataFrame(arcs)
+    # HH 포인트
+    fig.add_trace(go.Scattergeo(
+        lat=hh["lat"], lon=hh["lon"],
+        mode="markers",
+        name="High-High",
+        marker=dict(
+            size=12, color="#f05252", opacity=0.85,
+            line=dict(width=1, color="#08090c"),
+        ),
+        text=hh["unitName"] + "<br>" + hh["routeName"] +
+             "<br>Impact: " + hh["impact_score_mean"].round(4).astype(str),
+        hovertemplate="%{text}<extra></extra>",
+    ))
 
-    arc_layer = pdk.Layer(
-        "ArcLayer",
-        data=arc_df,
-        get_source_position=["s_lon", "s_lat"],
-        get_target_position=["t_lon", "t_lat"],
-        get_source_color=[248, 81, 73, 160],
-        get_target_color=[88, 166, 255, 160],
-        auto_highlight=True,
-        width_scale=0.0001,
-        get_width="score",
-        width_min_pixels=1,
-        width_max_pixels=6,
-    )
+    # 중심점
+    fig.add_trace(go.Scattergeo(
+        lat=[cy], lon=[cx],
+        mode="markers",
+        name="클러스터 중심",
+        marker=dict(
+            size=18, color="#5b6af0", opacity=0.9,
+            symbol="star",
+            line=dict(width=1, color="#f0f2f8"),
+        ),
+        hovertemplate="클러스터 중심<extra></extra>",
+    ))
 
-    scatter = pdk.Layer(
-        "ScatterplotLayer", data=hh,
-        get_position=["lon", "lat"],
-        get_fill_color=[248, 81, 73, 200],
-        get_radius=8000, pickable=True,
-    )
+    # 나머지 영업소 (배경)
+    others = impact_df[impact_df["lisa_cluster"] != "High-High"]
+    fig.add_trace(go.Scattergeo(
+        lat=others["lat"], lon=others["lon"],
+        mode="markers",
+        name="기타",
+        marker=dict(size=5, color="#1c1e27", opacity=0.5,
+                    line=dict(width=0)),
+        hoverinfo="skip",
+    ))
 
-    view_state = pdk.ViewState(latitude=36.5, longitude=127.8, zoom=6.0, pitch=45)
-    return pdk.Deck(
-        layers=[arc_layer, scatter],
-        initial_view_state=view_state,
-        map_style=MAPBOX_STYLE,
-    )
+    fig.update_layout(**_MAP_LAYOUT)
+    return fig
 
 
 
@@ -1549,15 +1582,15 @@ def main():
         # Map render
         st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
         if map_mode in ("impact","vulnerability","lisa"):
-            st.pydeck_chart(make_vulnerability_map(
+            st.plotly_chart(make_gis_map(
                 impact_df,
                 selected_routes=selected_routes or None,
                 map_mode=map_mode,
-            ), use_container_width=True, height=540)
+            ), use_container_width=True)
         elif map_mode == "heatmap":
-            st.pydeck_chart(make_heatmap(impact_df), use_container_width=True, height=540)
+            st.plotly_chart(make_heatmap_map(impact_df), use_container_width=True)
         else:
-            st.pydeck_chart(make_arc_map(impact_df), use_container_width=True, height=540)
+            st.plotly_chart(make_arc_map2d(impact_df), use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
@@ -1587,7 +1620,7 @@ def main():
                 "Moderate":"background-color:#041510;color:#34c77b",
                 "Low":"background-color:#0a0d20;color:#5b6af0",
             }
-            styled = top20.style.applymap(lambda v: GRADE_CSS.get(v,""), subset=["등급"])
+            styled = top20.style.map(lambda v: GRADE_CSS.get(v,""), subset=["등급"])
             st.dataframe(styled, use_container_width=True, height=440)
 
         with tc2:
@@ -1995,7 +2028,7 @@ def main():
     <div style="text-align:center;font-size:10px;color:var(--text-3);padding:4px 0 12px;
                  letter-spacing:.04em">
       LogisRisk &nbsp;·&nbsp; Model A (Prophet + LSTM) &nbsp;·&nbsp; Model B (Vulnerability)
-      &nbsp;·&nbsp; GIS: pydeck + Mapbox &nbsp;·&nbsp; 한국도로공사 TCS · 오피넷 · Investing.com
+      &nbsp;·&nbsp; GIS: Plotly Scattergeo 2D &nbsp;·&nbsp; 한국도로공사 TCS · 오피넷 · Investing.com
     </div>
     """, unsafe_allow_html=True)
 
