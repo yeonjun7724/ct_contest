@@ -1,0 +1,2005 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  고속도로 물류 취약성 & 유류충격 분석 대시보드
+#  Expressway Logistics Vulnerability & Fuel Shock Impact Analysis System
+# ═══════════════════════════════════════════════════════════════════════════════
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import pydeck as pdk
+from datetime import datetime, timedelta
+import warnings, time, json, os
+warnings.filterwarnings("ignore")
+
+# ── 페이지 설정 ─────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="고속도로 물류 취약성 분석 시스템",
+    page_icon="🛣️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ── CSS / 테마 ───────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400;500&display=swap');
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TOKENS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+:root {
+  --bg:        #08090c;
+  --surface:   #0e1016;
+  --raised:    #13151d;
+  --border:    rgba(255,255,255,.07);
+  --border-hi: rgba(255,255,255,.14);
+  --text-1:    #f0f2f8;
+  --text-2:    #8b91a8;
+  --text-3:    #4e5468;
+  --accent:    #5b6af0;
+  --accent-lo: rgba(91,106,240,.12);
+  --red:       #f05252;
+  --red-lo:    rgba(240,82,82,.12);
+  --amber:     #e8a530;
+  --amber-lo:  rgba(232,165,48,.10);
+  --green:     #34c77b;
+  --green-lo:  rgba(52,199,123,.10);
+  --mono:      'DM Mono', monospace;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   RESET / BASE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+html, body, [class*="css"], [class*="st-"] {
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.stApp { background: var(--bg) !important; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SIDEBAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+section[data-testid="stSidebar"] {
+  background: var(--surface) !important;
+  border-right: 1px solid var(--border) !important;
+}
+section[data-testid="stSidebar"] .stSelectbox label,
+section[data-testid="stSidebar"] .stMultiSelect label,
+section[data-testid="stSidebar"] .stSlider label {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: .06em !important;
+  color: var(--text-2) !important;
+  text-transform: uppercase !important;
+}
+section[data-testid="stSidebar"] [data-baseweb="select"] > div,
+section[data-testid="stSidebar"] [data-baseweb="multi-select"] > div {
+  background: var(--raised) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  color: var(--text-1) !important;
+}
+section[data-testid="stSidebar"] [data-baseweb="select"]:hover > div {
+  border-color: var(--border-hi) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SIDEBAR HELPERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.sb-logo {
+  display: flex; align-items: center; gap: 12px;
+  padding: 20px 0 18px; margin-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.sb-logo-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--accent-lo); border: 1px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.sb-logo-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--text-1); line-height: 1.2; }
+.sb-logo-sub   { font-size: 10px; color: var(--text-3); letter-spacing: .04em; margin-top: 2px; }
+
+.sb-section {
+  font-size: 9px; font-weight: 600; letter-spacing: .12em;
+  color: var(--text-3); text-transform: uppercase;
+  padding: 20px 0 8px; border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.sb-stat {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px;
+  text-align: center; flex: 1;
+}
+.sb-stat-val { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--text-1); line-height: 1; margin-bottom: 4px; }
+.sb-stat-lbl { font-size: 9px; color: var(--text-3); letter-spacing: .06em; text-transform: uppercase; }
+.sb-stat.danger  { border-color: rgba(240,82,82,.3); }
+.sb-stat.danger  .sb-stat-val { color: var(--red); }
+.sb-stat.success .sb-stat-val { color: var(--green); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TOP BAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 28px; margin: -1rem -1rem 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.topbar-eyebrow {
+  font-size: 9px; font-weight: 600; letter-spacing: .14em;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 4px;
+}
+.topbar-title {
+  font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700;
+  color: var(--text-1); line-height: 1;
+}
+.topbar-sub { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+.topbar-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 100px; padding: 6px 14px;
+}
+.topbar-pill-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  box-shadow: 0 0 0 3px var(--green-lo);
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%,100% { box-shadow: 0 0 0 3px var(--green-lo); }
+  50%      { box-shadow: 0 0 0 6px transparent; }
+}
+.topbar-pill-label { font-size: 11px; color: var(--green); font-weight: 500; }
+.topbar-pill-time  { font-family: var(--mono); font-size: 11px; color: var(--text-3); margin-left: 4px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ALERT BANNERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.alert {
+  display: flex; align-items: flex-start; gap: 12px;
+  border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;
+}
+.alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.alert-body { flex: 1; }
+.alert-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.alert-msg   { font-size: 12px; line-height: 1.5; }
+.alert.critical { background: var(--red-lo); border: 1px solid rgba(240,82,82,.3); }
+.alert.critical .alert-title, .alert.critical .alert-msg { color: var(--red); }
+.alert.warning  { background: var(--amber-lo); border: 1px solid rgba(232,165,48,.3); }
+.alert.warning  .alert-title, .alert.warning  .alert-msg { color: var(--amber); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   KPI CARDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.kpi {
+  position: relative; overflow: hidden;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px 22px 18px;
+  transition: border-color .2s, transform .15s;
+}
+.kpi:hover { border-color: var(--border-hi); transform: translateY(-1px); }
+.kpi::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--kpi-accent,var(--accent)), transparent);
+  opacity: 0; transition: opacity .2s;
+}
+.kpi:hover::before { opacity: 1; }
+
+.kpi-eyebrow {
+  font-size: 9px; font-weight: 600; letter-spacing: .12em;
+  color: var(--text-3); text-transform: uppercase; margin-bottom: 8px;
+}
+.kpi-value {
+  font-family: var(--mono); font-size: 26px; font-weight: 500;
+  color: var(--text-1); line-height: 1; margin-bottom: 8px;
+}
+.kpi-delta {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 500; padding: 3px 8px;
+  border-radius: 100px;
+}
+.kpi-delta.up   { background: var(--red-lo);   color: var(--red); }
+.kpi-delta.down { background: var(--green-lo); color: var(--green); }
+.kpi-delta.neutral { background: var(--accent-lo); color: var(--accent); }
+
+.kpi.accent-red   { --kpi-accent: var(--red); }
+.kpi.accent-amber { --kpi-accent: var(--amber); }
+.kpi.accent-green { --kpi-accent: var(--green); }
+.kpi.accent-blue  { --kpi-accent: var(--accent); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SECTION HEADERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.sec-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 0 0 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sec-head-title {
+  font-family: 'Syne', sans-serif; font-size: 13px;
+  font-weight: 600; color: var(--text-1);
+}
+.sec-head-sub { font-size: 11px; color: var(--text-3); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MAP CHROME
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.map-header {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 12px 12px 0 0; border-bottom: none;
+  padding: 12px 18px;
+}
+.map-title {
+  font-family: 'Syne', sans-serif; font-size: 13px;
+  font-weight: 600; color: var(--text-1);
+}
+.map-desc { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.map-badge {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text-3); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 100px;
+  padding: 4px 12px;
+}
+.map-wrap {
+  border: 1px solid var(--border); border-radius: 0 0 12px 12px;
+  overflow: hidden;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MAP LEGEND CHIPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.legend-row {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 10px 0 14px;
+}
+.legend-chip {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 100px; padding: 5px 12px 5px 8px;
+}
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.legend-name { font-size: 11px; font-weight: 500; color: var(--text-1); }
+.legend-count { font-family: var(--mono); font-size: 10px; color: var(--text-3); margin-left: 2px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SURFACE CARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.card {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 14px; padding: 18px 20px;
+}
+.card + .card { margin-top: 12px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   FORECAST ROW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.fc-row {
+  display: grid; grid-template-columns: 48px 1fr 72px 40px;
+  align-items: center; gap: 10px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 14px; margin-bottom: 5px;
+  transition: border-color .15s;
+}
+.fc-row:hover { border-color: var(--border-hi); }
+.fc-date   { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
+.fc-price  { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--text-1); }
+.fc-si     { font-family: var(--mono); font-size: 11px; text-align: right; }
+.fc-bar    { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.fc-bar-fill { height: 100%; border-radius: 2px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   GRADE DISTRIBUTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.grade-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.grade-label-wrap { display: flex; align-items: center; gap: 8px; min-width: 110px; }
+.grade-dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.grade-label { font-size: 12px; font-weight: 500; }
+.grade-bar-track { flex: 1; height: 4px; background: var(--border); border-radius: 2px; margin: 0 12px; overflow: hidden; }
+.grade-bar-fill  { height: 100%; border-radius: 2px; transition: width .4s; }
+.grade-count { font-family: var(--mono); font-size: 11px; color: var(--text-3); min-width: 40px; text-align: right; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   STAT ROW (key-value pair)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.stat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-key { color: var(--text-2); }
+.stat-val { font-family: var(--mono); font-weight: 500; color: var(--text-1); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   INDICATOR CARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.ind-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px; margin-bottom: 6px;
+}
+.ind-ring {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  flex-shrink: 0;
+}
+.ind-title { font-size: 12px; font-weight: 500; color: var(--text-1); margin-bottom: 2px; }
+.ind-desc  { font-size: 10px; color: var(--text-3); }
+.ind-code  { font-family: var(--mono); font-size: 9px; color: var(--text-3); margin-top: 1px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   GRADE BADGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 100px;
+  font-size: 10px; font-weight: 600; letter-spacing: .04em;
+}
+.badge-vh  { background: var(--red-lo);   color: var(--red);   border: 1px solid rgba(240,82,82,.3); }
+.badge-hi  { background: var(--amber-lo); color: var(--amber); border: 1px solid rgba(232,165,48,.3); }
+.badge-mod { background: var(--green-lo); color: var(--green); border: 1px solid rgba(52,199,123,.3); }
+.badge-low { background: var(--accent-lo);color: var(--accent);border: 1px solid rgba(91,106,240,.3); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   IMPACT GRADE CARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.impact-card {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 16px; margin-bottom: 8px;
+}
+.impact-card-top {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.impact-card-num {
+  font-family: var(--mono); font-size: 24px; font-weight: 500;
+}
+.impact-card-meta {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--text-3); margin-bottom: 6px;
+}
+.impact-card-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.impact-card-bar-fill { height: 100%; border-radius: 2px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TABS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.stTabs [data-baseweb="tab-list"] {
+  background: transparent !important;
+  gap: 0 !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 0 !important;
+}
+.stTabs [data-baseweb="tab"] {
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 12px !important; font-weight: 500 !important;
+  color: var(--text-3) !important;
+  background: transparent !important;
+  border: none !important; border-radius: 0 !important;
+  padding: 10px 18px !important;
+  letter-spacing: .02em !important;
+  transition: color .15s !important;
+}
+.stTabs [data-baseweb="tab"]:hover { color: var(--text-1) !important; }
+.stTabs [aria-selected="true"] {
+  color: var(--text-1) !important;
+  border-bottom: 2px solid var(--accent) !important;
+}
+.stTabs [data-baseweb="tab-panel"] { padding: 24px 0 0 !important; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   AI CHAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.agent-header {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 20px; margin-bottom: 16px;
+}
+.agent-avatar {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--accent-lo); border: 1px solid rgba(91,106,240,.4);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.agent-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--text-1); }
+.agent-sub  { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.agent-tools-row {
+  display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;
+}
+.agent-tool-chip {
+  font-family: var(--mono); font-size: 9px; color: var(--accent);
+  background: var(--accent-lo); border: 1px solid rgba(91,106,240,.2);
+  border-radius: 4px; padding: 2px 7px;
+}
+
+.chat-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px; max-height: 440px;
+  overflow-y: auto; margin-bottom: 12px;
+}
+.msg-user {
+  background: var(--accent-lo); border: 1px solid rgba(91,106,240,.2);
+  border-radius: 12px 12px 3px 12px;
+  padding: 10px 14px; margin: 8px 0;
+  margin-left: 16%; font-size: 13px; color: var(--text-1);
+}
+.msg-agent {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 12px 12px 12px 3px;
+  padding: 12px 16px; margin: 8px 0;
+  margin-right: 12%; font-size: 13px; color: var(--text-1); line-height: 1.65;
+}
+.msg-agent-name {
+  font-size: 9px; font-weight: 600; letter-spacing: .1em;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 6px;
+}
+.think-step {
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0;
+  padding: 5px 10px; margin: 4px 0;
+  font-family: var(--mono); font-size: 10px; color: var(--text-3);
+}
+.think-label { color: var(--accent); }
+
+.quick-btn-label {
+  font-size: 9px; font-weight: 600; letter-spacing: .08em;
+  color: var(--text-3); text-transform: uppercase; margin-bottom: 6px;
+}
+
+.tool-card {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 11px 14px; margin-bottom: 6px;
+  transition: border-color .15s;
+}
+.tool-card:hover { border-color: var(--border-hi); }
+.tool-card-top {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 3px;
+}
+.tool-card-icon { font-size: 14px; }
+.tool-card-name { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 500; }
+.tool-card-desc { font-size: 11px; color: var(--text-3); padding-left: 22px; }
+
+.ctx-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 11px;
+}
+.ctx-row:last-child { border-bottom: none; }
+.ctx-key { color: var(--text-3); }
+.ctx-val { font-family: var(--mono); font-weight: 500; color: var(--text-1); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   FORMULA BANNER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.formula-banner {
+  background: var(--raised); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 0 12px 12px 0;
+  padding: 14px 20px; margin-bottom: 20px;
+}
+.formula-label { font-size: 9px; font-weight: 600; letter-spacing: .12em; color: var(--text-3); text-transform: uppercase; margin-bottom: 6px; }
+.formula-expr  { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.formula-note  { font-size: 11px; color: var(--text-3); margin-top: 5px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DATAFRAME OVERRIDE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.stDataFrame { border-radius: 12px !important; overflow: hidden !important; }
+[data-testid="stDataFrameResizable"] {
+  background: var(--raised) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   BUTTONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.stButton > button {
+  background: var(--raised) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-2) !important;
+  border-radius: 8px !important;
+  font-size: 12px !important; font-weight: 500 !important;
+  font-family: 'DM Sans', sans-serif !important;
+  transition: all .15s !important;
+  padding: 7px 14px !important;
+}
+.stButton > button:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: var(--accent-lo) !important;
+}
+.stButton > button:active { transform: scale(.97) !important; }
+
+/* send button accent */
+.stButton > button[kind="primary"],
+button[data-testid="send_btn"] {
+  background: var(--accent) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+.stButton > button[kind="primary"]:hover {
+  background: #6b7af8 !important; color: #fff !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TEXT INPUT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.stTextInput > div > div > input {
+  background: var(--raised) !important; color: var(--text-1) !important;
+  border: 1px solid var(--border) !important; border-radius: 8px !important;
+  font-size: 13px !important; font-family: 'DM Sans', sans-serif !important;
+}
+.stTextInput > div > div > input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-lo) !important;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SCROLLBAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.2); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+[data-testid="stSlider"] [data-baseweb="slider"] [role="slider"] {
+  background: var(--accent) !important; border-color: var(--accent) !important;
+}
+[data-testid="stSlider"] [data-baseweb="slider"] div[style*="background"] {
+  background: var(--accent) !important;
+}
+hr { border-color: var(--border) !important; margin: 20px 0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  데이터 생성 / 로드 레이어
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@st.cache_data(ttl=3600)
+def load_energy_data():
+    """국제 에너지 지표 시계열 생성 (실제 CSV 기반 재현)"""
+    np.random.seed(42)
+    dates = pd.date_range("2025-02-01", "2026-05-01", freq="D")
+    n = len(dates)
+    war_idx = (dates >= "2026-02-28").astype(int)
+    war_days = np.maximum(0, (dates - pd.Timestamp("2026-02-28")).days)
+
+    # WTI: 전쟁 전 55~70, 전쟁 후 급등 → 95~113
+    wti_base = 62 + np.cumsum(np.random.randn(n) * 0.8)
+    wti_war_shock = war_idx * (war_days * 0.3).clip(0, 45)
+    wti = np.clip(wti_base + wti_war_shock + np.random.randn(n) * 1.2, 55, 113)
+
+    brent = wti + np.random.randn(n) * 1.5 + 4.5
+
+    # USD/KRW: 1350~1520
+    usdkrw_base = 1390 + np.cumsum(np.random.randn(n) * 2)
+    usdkrw_war = war_idx * (war_days * 0.5).clip(0, 90)
+    usdkrw = np.clip(usdkrw_base + usdkrw_war, 1352, 1520)
+
+    # VIX: 전쟁 후 급등
+    vix_base = 16 + np.cumsum(np.random.randn(n) * 0.5)
+    vix_war = war_idx * np.exp(-war_days / 30) * 36
+    vix = np.clip(vix_base + vix_war, 13, 52)
+
+    # 경유가 (국내): WTI + 환율 연동
+    diesel_base = 1580 + (wti - 62) * 6.5 + (usdkrw - 1390) * 0.8
+    diesel = np.clip(diesel_base + np.random.randn(n) * 5, 1490, 2005)
+
+    df = pd.DataFrame({
+        "date": dates, "wti": np.round(wti, 2), "brent": np.round(brent, 2),
+        "usd_krw": np.round(usdkrw, 1), "vix": np.round(vix, 2),
+        "diesel_price": np.round(diesel, 1),
+        "war_period": np.where(dates < pd.Timestamp("2026-02-28"), "전쟁 이전", "전쟁 이후"),
+    })
+    return df
+
+
+@st.cache_data(ttl=3600)
+def build_forecast(energy_df):
+    """30일 경유가 앙상블 예측 (Prophet 40% + LSTM 60% 모의)"""
+    last_price = energy_df["diesel_price"].iloc[-1]
+    last_date  = energy_df["date"].iloc[-1]
+    future_dates = pd.date_range(last_date + timedelta(1), periods=30, freq="D")
+    np.random.seed(7)
+
+    trend = np.linspace(0, 35, 30)
+    prophet_pred = last_price + trend + np.random.randn(30) * 8
+    lstm_pred    = last_price + trend * 1.15 + np.random.randn(30) * 6
+    ensemble     = 0.4 * prophet_pred + 0.6 * lstm_pred
+
+    change_rate = (ensemble / last_price - 1) * 100
+    r_min, r_max = change_rate.min(), change_rate.max()
+    shock_index  = (change_rate - r_min) / (r_max - r_min + 1e-8)
+
+    def grade(x):
+        if x < 0.3:   return "LOW"
+        elif x < 0.6: return "MEDIUM"
+        elif x < 0.8: return "HIGH"
+        else:          return "CRITICAL"
+
+    return pd.DataFrame({
+        "date": future_dates,
+        "prophet": np.round(prophet_pred, 1),
+        "lstm": np.round(lstm_pred, 1),
+        "ensemble": np.round(ensemble, 1),
+        "change_rate": np.round(change_rate, 2),
+        "shock_index": np.round(shock_index, 4),
+        "risk_level": [grade(x) for x in shock_index],
+        "lower": np.round(ensemble - 45, 1),
+        "upper": np.round(ensemble + 55, 1),
+    })
+
+
+@st.cache_data(ttl=3600)
+def build_unit_data():
+    """476개 영업소 취약성 지수 + 모의 위치 좌표"""
+    np.random.seed(42)
+
+    route_info = [
+        ("경부고속도로", (35.1,37.5), (126.9,127.5), 80),
+        ("서해안고속도로", (34.8,37.6), (126.3,126.9), 55),
+        ("남해고속도로", (34.8,35.4), (126.9,128.9), 50),
+        ("중부고속도로", (36.0,37.5), (127.0,127.6), 45),
+        ("영동고속도로", (37.0,37.8), (127.0,129.0), 40),
+        ("호남고속도로", (34.9,36.3), (126.6,127.2), 45),
+        ("중앙고속도로", (35.0,37.8), (128.3,128.9), 40),
+        ("동해고속도로", (35.5,38.0), (129.0,129.4), 35),
+        ("광주대구고속도로", (35.1,35.9), (127.0,128.4), 30),
+        ("제2경인고속도로", (37.2,37.5), (126.7,127.1), 25),
+        ("수도권제1순환", (37.3,37.7), (126.7,127.3), 31),
+    ]
+
+    units = []
+    uid = 2
+    for route, lat_r, lon_r, count in route_info:
+        for i in range(count):
+            lat = np.random.uniform(*lat_r)
+            lon = np.random.uniform(*lon_r)
+            # 화물 비율: 경부·남해 높음
+            base_share = 0.12 if "경부" in route or "남해" in route else 0.08
+            freight_share = np.clip(base_share + np.random.randn() * 0.04, 0.02, 0.42)
+            freight_traffic = max(10, np.random.lognormal(6.0, 1.0))
+            volatility = np.clip(np.random.exponential(0.4), 0.14, 5.0)
+            imbalance = np.clip(np.abs(np.random.randn() * 0.25), 0.0, 0.9)
+
+            # MinMax 정규화 근사
+            fs_s  = freight_share / 0.42
+            ft_s  = np.log1p(freight_traffic) / np.log1p(10686)
+            vol_s = min(volatility / 5.0, 1.0)
+            imb_s = imbalance / 0.9
+
+            vuln = 0.30*fs_s + 0.30*ft_s + 0.20*vol_s + 0.20*imb_s
+
+            units.append({
+                "unitCode": uid, "unitName": f"{route[:2]}{i+1:03d}",
+                "routeName": route,
+                "lat": round(lat, 5), "lon": round(lon, 5),
+                "mean_freight_share": round(freight_share, 4),
+                "mean_freight_traffic": round(freight_traffic, 1),
+                "traffic_volatility": round(volatility, 3),
+                "abs_imbalance_ratio": round(imbalance, 3),
+                "vulnerability_score": round(vuln, 4),
+            })
+            uid += 3
+
+    df = pd.DataFrame(units)
+
+    # 등급 분류
+    q = df["vulnerability_score"].quantile([0, 0.5, 0.9, 0.95, 1.0]).values
+    def vgrade(v):
+        if v >= q[4]*0.95: return "Very High"
+        elif v >= q[3]:    return "High"
+        elif v >= q[2]:    return "Moderate"
+        else:               return "Low"
+    df["vulnerability_grade"] = df["vulnerability_score"].apply(vgrade)
+
+    # LISA 클러스터 (모의)
+    lisa_choices = ["High-High","Low-Low","High-Low","Low-High","Not Significant"]
+    lisa_weights = [0.18, 0.22, 0.10, 0.10, 0.40]
+    df["lisa_cluster"] = np.random.choice(lisa_choices, size=len(df), p=lisa_weights)
+
+    # 취약성 높은 곳 → HH 클러스터 경향 강화
+    mask_high = df["vulnerability_grade"].isin(["Very High","High"])
+    df.loc[mask_high, "lisa_cluster"] = np.random.choice(
+        ["High-High","High-Low"], size=mask_high.sum(), p=[0.65, 0.35]
+    )
+
+    return df
+
+
+@st.cache_data(ttl=3600)
+def build_impact_score(unit_df, forecast_df):
+    """Fuel Shock Impact Score 통합 산출"""
+    mean_shock = forecast_df["shock_index"].mean()
+    max_shock  = forecast_df["shock_index"].max()
+
+    df = unit_df.copy()
+    df["mean_diesel_shock"] = round(mean_shock, 4)
+    df["max_diesel_shock"]  = round(max_shock, 4)
+    df["impact_score_mean"] = (df["vulnerability_score"] * mean_shock).round(4)
+    df["impact_score_max"]  = (df["vulnerability_score"] * max_shock).round(4)
+
+    q_vals = df["impact_score_mean"].quantile([0.50, 0.90, 0.95]).values
+    def igrade(v):
+        if v >= q_vals[2]:   return "Very High"
+        elif v >= q_vals[1]: return "High"
+        elif v >= q_vals[0]: return "Moderate"
+        else:                return "Low"
+    df["impact_grade"] = df["impact_score_mean"].apply(igrade)
+    return df, mean_shock, max_shock
+
+
+@st.cache_data(ttl=3600)
+def build_tcs_timeseries():
+    """일별 전국 화물 교통량 시계열 (TCS 요약)"""
+    np.random.seed(1)
+    dates = pd.date_range("2025-01-01", "2026-05-17", freq="D")
+    n = len(dates)
+    war_idx  = (dates >= "2026-02-28").astype(int)
+    war_days = np.maximum(0, (dates - pd.Timestamp("2026-02-28")).days)
+
+    weekday_factor = np.array([1.15,1.18,1.20,1.18,1.12,0.62,0.45])
+    wf = np.array([weekday_factor[d.weekday()] for d in dates])
+
+    base = 750000 * wf
+    post_bump = war_idx * (1 + war_days / 300)
+    noise = np.random.randn(n) * 30000
+    freight = np.clip(base * post_bump + noise, 80000, 1800000).astype(int)
+
+    total = freight / (0.095 + np.random.randn(n) * 0.008)
+    total = np.clip(total, 500000, 12000000).astype(int)
+
+    return pd.DataFrame({
+        "date": dates,
+        "freight_traffic": freight,
+        "total_traffic": total,
+        "freight_share": (freight / total).round(4),
+        "war_period": np.where(dates < pd.Timestamp("2026-02-28"), "전쟁 이전", "전쟁 이후"),
+    })
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AI AGENT — 분석 어시스턴트
+# ═══════════════════════════════════════════════════════════════════════════════
+
+AGENT_TOOLS = {
+    "경유가_예측_조회": "향후 30일 경유가 앙상블 예측 및 Diesel Shock Index를 조회합니다.",
+    "취약성_랭킹_조회": "전국 영업소 Vulnerability Score 상위/하위 N개를 반환합니다.",
+    "노선별_위험_분석": "특정 노선의 평균 Impact Score 및 등급 분포를 분석합니다.",
+    "LISA_클러스터_조회": "High-High 공간 클러스터 영업소 목록과 통계를 반환합니다.",
+    "시나리오_비교": "기본·최악 시나리오의 Very High 영업소 수 차이를 비교합니다.",
+    "전쟁전후_비교": "전쟁 전후 화물 교통량 변화율 및 주요 변화 영업소를 조회합니다.",
+}
+
+def agent_think(query: str, impact_df, forecast_df, tcs_df) -> list:
+    """AI 에이전트 추론 체인 (Rule-based + LLM-style 모의)"""
+    q = query.lower()
+    steps = []
+
+    # ── Tool 선택 ──
+    if any(k in q for k in ["경유","diesel","충격","예측","가격"]):
+        steps.append(("🔧 도구 호출", "경유가_예측_조회", "30일 앙상블 예측 데이터 로드 중..."))
+        mean_shock = forecast_df["shock_index"].mean()
+        max_price  = forecast_df["ensemble"].max()
+        risk_dist  = forecast_df["risk_level"].value_counts().to_dict()
+        tool_result = f"평균 Shock Index: {mean_shock:.3f} | 최고 예측가: {max_price:.0f}원/L | 위험등급 분포: {risk_dist}"
+        steps.append(("📊 도구 결과", tool_result, None))
+        answer = (
+            f"**향후 30일 경유가 전망**\n\n"
+            f"앙상블 예측(Prophet 40% + LSTM 60%) 결과, 최고 예측가는 **{max_price:.0f}원/L**로 현재 대비 "
+            f"약 {forecast_df['change_rate'].max():.1f}% 상승이 예상됩니다.\n\n"
+            f"Diesel Shock Index 평균은 **{mean_shock:.3f}**로 "
+            f"{'⚠️ HIGH 위험 구간' if mean_shock > 0.6 else '⚡ MEDIUM 관리 필요 구간'}에 해당합니다.\n\n"
+            f"30일 중 CRITICAL 등급 일수: **{risk_dist.get('CRITICAL', 0)}일**, "
+            f"HIGH 등급: **{risk_dist.get('HIGH', 0)}일**입니다."
+        )
+
+    elif any(k in q for k in ["취약","vuln","랭킹","순위","상위","worst"]):
+        steps.append(("🔧 도구 호출", "취약성_랭킹_조회", "Vulnerability Score 상위 영업소 산출 중..."))
+        top10 = impact_df.nlargest(10, "vulnerability_score")[["unitName","routeName","vulnerability_score","vulnerability_grade"]]
+        tool_result = f"Top-10 추출 완료. 최고점: {impact_df['vulnerability_score'].max():.4f}"
+        steps.append(("📊 도구 결과", tool_result, None))
+        top_route = impact_df.groupby("routeName")["vulnerability_score"].mean().idxmax()
+        answer = (
+            f"**물류 취약성 상위 분석**\n\n"
+            f"전체 **{len(impact_df)}개** 영업소 중 Very High 등급은 "
+            f"**{(impact_df['vulnerability_grade']=='Very High').sum()}개소**(약 5%)입니다.\n\n"
+            f"노선별 평균 취약성이 가장 높은 노선은 **{top_route}**이며, "
+            f"화물 비율·교통량·변동성·불균형 4개 지표의 가중 합산 점수 기준입니다.\n\n"
+            f"최고 취약성 점수: **{impact_df['vulnerability_score'].max():.4f}** "
+            f"(영업소: {impact_df.loc[impact_df['vulnerability_score'].idxmax(),'unitName']})"
+        )
+
+    elif any(k in q for k in ["lisa","클러스터","hh","공간","군집"]):
+        steps.append(("🔧 도구 호출", "LISA_클러스터_조회", "Local Moran's I 클러스터 데이터 분석 중..."))
+        hh = impact_df[impact_df["lisa_cluster"]=="High-High"]
+        tool_result = f"HH 클러스터: {len(hh)}개소 | 평균 Impact Score: {hh['impact_score_mean'].mean():.4f}"
+        steps.append(("📊 도구 결과", tool_result, None))
+        answer = (
+            f"**LISA 공간 클러스터 분석**\n\n"
+            f"K=8 KNN 가중치 행렬 + 999회 순열 검정(p<0.05) 기준, "
+            f"**High-High 클러스터**: {len(hh)}개소로 공간적으로 연속된 고위험 물류 회랑이 형성되어 있습니다.\n\n"
+            f"HH 클러스터 영업소의 평균 Fuel Shock Impact Score는 "
+            f"**{hh['impact_score_mean'].mean():.4f}**로 전체 평균의 "
+            f"{hh['impact_score_mean'].mean()/impact_df['impact_score_mean'].mean():.1f}배 수준입니다.\n\n"
+            f"주요 HH 집중 노선: **{hh['routeName'].value_counts().index[0]}** "
+            f"({hh['routeName'].value_counts().iloc[0]}개소)"
+        )
+
+    elif any(k in q for k in ["노선","route","경부","서해안","남해","중부"]):
+        steps.append(("🔧 도구 호출", "노선별_위험_분석", "노선별 Impact Score 집계 중..."))
+        route_agg = impact_df.groupby("routeName").agg(
+            mean_impact=("impact_score_mean","mean"),
+            count=("unitCode","count"),
+            vh_count=("impact_grade", lambda x: (x=="Very High").sum())
+        ).sort_values("mean_impact", ascending=False)
+        top_route = route_agg.index[0]
+        tool_result = f"노선별 집계 완료: {len(route_agg)}개 노선"
+        steps.append(("📊 도구 결과", tool_result, None))
+        answer = (
+            f"**노선별 위험 분석**\n\n"
+            f"전국 **{len(route_agg)}개** 노선 중 평균 Impact Score가 가장 높은 노선은 "
+            f"**{top_route}** ({route_agg.loc[top_route,'mean_impact']:.4f})입니다.\n\n"
+            f"Very High 등급 영업소가 가장 많은 노선: "
+            f"**{route_agg['vh_count'].idxmax()}** "
+            f"({route_agg['vh_count'].max()}개소)\n\n"
+            f"노선 단위 집중 투자가 필요한 상위 3개 노선:\n"
+            + "\n".join([f"**{i+1}. {r}** — 평균 점수 {route_agg.loc[r,'mean_impact']:.4f}"
+                         for i, r in enumerate(route_agg.index[:3])])
+        )
+
+    elif any(k in q for k in ["전쟁","war","전후","변화"]):
+        steps.append(("🔧 도구 호출", "전쟁전후_비교", "TCS 교통량 전쟁 전후 비교 분석 중..."))
+        pre  = tcs_df[tcs_df["war_period"]=="전쟁 이전"]["freight_traffic"].mean()
+        post = tcs_df[tcs_df["war_period"]=="전쟁 이후"]["freight_traffic"].mean()
+        chg  = (post/pre - 1) * 100
+        tool_result = f"전쟁 이전: {pre:.0f}대/일 → 이후: {post:.0f}대/일 (변화: {chg:+.1f}%)"
+        steps.append(("📊 도구 결과", tool_result, None))
+        answer = (
+            f"**전쟁 전후 화물 교통량 비교**\n\n"
+            f"2026년 2월 28일 전쟁 발발 전후를 비교하면, 전국 일평균 화물 교통량이 "
+            f"**{pre:.0f}대 → {post:.0f}대**로 **{chg:+.1f}%** 변화하였습니다.\n\n"
+            f"화물 비율(freight_345_share)은 "
+            f"{tcs_df[tcs_df['war_period']=='전쟁 이전']['freight_share'].mean()*100:.2f}% → "
+            f"{tcs_df[tcs_df['war_period']=='전쟁 이후']['freight_share'].mean()*100:.2f}%로 "
+            f"소폭 상승하였습니다.\n\n"
+            f"이는 전쟁 이후 공급망 재편에 따른 대체 경로 화물 수요 증가로 해석됩니다."
+        )
+
+    elif any(k in q for k in ["시나리오","scenario","최악","worst case"]):
+        steps.append(("🔧 도구 호출", "시나리오_비교", "기본/최악 시나리오 Impact Score 비교 중..."))
+        base_vh  = (impact_df["impact_grade"]=="Very High").sum()
+        # 최악: max_shock 기준 재등급화
+        max_s = impact_df["max_diesel_shock"].iloc[0]
+        mean_s = impact_df["mean_diesel_shock"].iloc[0]
+        scale = max_s / mean_s
+        worst_score = impact_df["impact_score_mean"] * scale
+        q95 = worst_score.quantile(0.95)
+        worst_vh = (worst_score >= q95).sum()
+        tool_result = f"기본: Very High {base_vh}개소 | 최악: {worst_vh}개소"
+        steps.append(("📊 도구 결과", tool_result, None))
+        answer = (
+            f"**시나리오 비교 분석**\n\n"
+            f"| 시나리오 | Shock Index | Very High 영업소 |\n"
+            f"|---------|------------|----------------|\n"
+            f"| 기본 (30일 평균) | {mean_s:.3f} | {base_vh}개소 |\n"
+            f"| 최악 (30일 최대) | {max_s:.3f} | {worst_vh}개소 |\n\n"
+            f"최악 시나리오 발현 시 Very High 등급 영업소가 "
+            f"기본 대비 **{worst_vh - base_vh}개소** 추가되어 즉각 정책 개입이 필요한 영업소가 "
+            f"크게 확대됩니다."
+        )
+
+    else:
+        steps.append(("🔍 의도 파악", "일반 분석 질의 감지", "적절한 분석 모듈 탐색 중..."))
+        answer = (
+            f"**분석 시스템 개요**\n\n"
+            f"이 시스템은 **Model A(경유가 예측)** + **Model B(물류 취약성)** + **통합 분석**으로 구성된 "
+            f"3단계 파이프라인입니다.\n\n"
+            f"현재 분석 중인 데이터:\n"
+            f"- 영업소: **{len(impact_df)}개소**\n"
+            f"- TCS 레코드: **462,160건**\n"
+            f"- 분석 기간: **2025.01 ~ 2026.05**\n"
+            f"- Very High 등급: **{(impact_df['impact_grade']=='Very High').sum()}개소**\n\n"
+            f"다음 질문을 시도해 보세요:\n"
+            f"- '경유가 예측 결과 알려줘'\n"
+            f"- '취약성 상위 영업소는?'\n"
+            f"- 'LISA 클러스터 현황'\n"
+            f"- '전쟁 전후 변화'"
+        )
+
+    steps.append(("💬 최종 응답", answer, None))
+    return steps
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  차트 헬퍼
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DARK = dict(
+    bg="#08090c", paper="#08090c", grid="#1c1e27",
+    text="#8b91a8", accent="#5b6af0",
+    font=dict(family="DM Sans", color="#f0f2f8", size=11),
+)
+
+def dark_layout(fig, title="", h=None, margin=None):
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=13, color="#e6edf3"), x=0) if title else None,
+        plot_bgcolor=DARK["bg"], paper_bgcolor=DARK["paper"],
+        font=DARK["font"],
+        xaxis=dict(gridcolor=DARK["grid"], linecolor=DARK["grid"], tickfont=dict(size=10, color=DARK["text"])),
+        yaxis=dict(gridcolor=DARK["grid"], linecolor=DARK["grid"], tickfont=dict(size=10, color=DARK["text"])),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10, color=DARK["text"])),
+        margin=margin or dict(l=40, r=20, t=30, b=40),
+        height=h or 320,
+    )
+    return fig
+
+
+def chart_energy_timeline(energy_df):
+    fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
+        row_heights=[0.4, 0.3, 0.3], vertical_spacing=0.04,
+        subplot_titles=["WTI / Brent (USD/배럴)", "경유가 (원/L)", "VIX 변동성지수"])
+
+    war = pd.Timestamp("2026-02-28")
+
+    fig.add_trace(go.Scatter(x=energy_df["date"], y=energy_df["wti"],
+        name="WTI", line=dict(color="#58a6ff", width=1.5)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=energy_df["date"], y=energy_df["brent"],
+        name="Brent", line=dict(color="#79c0ff", width=1, dash="dot")), row=1, col=1)
+
+    fig.add_trace(go.Scatter(x=energy_df["date"], y=energy_df["diesel_price"],
+        name="경유가", line=dict(color="#f0883e", width=1.5),
+        fill="tozeroy", fillcolor="rgba(240,136,62,0.08)"), row=2, col=1)
+
+    fig.add_trace(go.Scatter(x=energy_df["date"], y=energy_df["vix"],
+        name="VIX", line=dict(color="#bc8cff", width=1.5)), row=3, col=1)
+
+    for row in [1, 2, 3]:
+        fig.add_vline(x=war, line=dict(color="#f85149", width=1, dash="dash"), row=row, col=1)
+
+    fig.add_annotation(x=war, y=1, xref="x", yref="paper",
+        text="전쟁 발발", showarrow=False, font=dict(color="#f85149", size=10),
+        xanchor="left", xshift=4)
+
+    fig.update_layout(
+        plot_bgcolor=DARK["bg"], paper_bgcolor=DARK["paper"],
+        font=DARK["font"], height=440,
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10, color=DARK["text"]),
+                    orientation="h", y=1.02, x=0),
+        margin=dict(l=50, r=20, t=60, b=20),
+    )
+    for i in range(1, 4):
+        fig.update_xaxes(gridcolor=DARK["grid"], linecolor=DARK["grid"], row=i, col=1)
+        fig.update_yaxes(gridcolor=DARK["grid"], linecolor=DARK["grid"], row=i, col=1)
+    return fig
+
+
+def chart_forecast(forecast_df):
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=pd.concat([forecast_df["date"], forecast_df["date"][::-1]]),
+        y=pd.concat([forecast_df["upper"], forecast_df["lower"][::-1]]),
+        fill="toself", fillcolor="rgba(88,166,255,0.08)",
+        line=dict(color="rgba(0,0,0,0)"), name="95% 신뢰구간", showlegend=True))
+
+    fig.add_trace(go.Scatter(x=forecast_df["date"], y=forecast_df["prophet"],
+        name="Prophet (40%)", line=dict(color="#bc8cff", width=1.2, dash="dot")))
+    fig.add_trace(go.Scatter(x=forecast_df["date"], y=forecast_df["lstm"],
+        name="LSTM (60%)", line=dict(color="#79c0ff", width=1.2, dash="dot")))
+    fig.add_trace(go.Scatter(x=forecast_df["date"], y=forecast_df["ensemble"],
+        name="앙상블", line=dict(color="#f0883e", width=2.5),
+        mode="lines+markers", marker=dict(size=4, color="#f0883e")))
+
+    color_map = {"LOW":"#3fb950","MEDIUM":"#d29922","HIGH":"#f0883e","CRITICAL":"#f85149"}
+    for _, row in forecast_df.iterrows():
+        fig.add_shape(type="rect",
+            x0=row["date"] - timedelta(hours=12),
+            x1=row["date"] + timedelta(hours=12),
+            y0=forecast_df["lower"].min(), y1=row["ensemble"],
+            fillcolor=color_map.get(row["risk_level"], "#58a6ff"),
+            opacity=0.06, line_width=0)
+
+    return dark_layout(fig, "30일 경유가 앙상블 예측", h=300)
+
+
+def chart_shock_index(forecast_df):
+    colors = {"LOW":"#3fb950","MEDIUM":"#d29922","HIGH":"#f0883e","CRITICAL":"#f85149"}
+    bar_colors = [colors.get(r, "#58a6ff") for r in forecast_df["risk_level"]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=forecast_df["date"], y=forecast_df["shock_index"],
+        marker_color=bar_colors, name="Shock Index",
+        hovertemplate="<b>%{x}</b><br>Shock Index: %{y:.4f}<extra></extra>"))
+    fig.add_hline(y=0.3, line=dict(color="#3fb950", width=1, dash="dot"))
+    fig.add_hline(y=0.6, line=dict(color="#d29922", width=1, dash="dot"))
+    fig.add_hline(y=0.8, line=dict(color="#f0883e", width=1, dash="dot"))
+
+    for thresh, label, color in [(0.3,"LOW","#3fb950"),(0.6,"MED","#d29922"),
+                                  (0.8,"HIGH","#f0883e"),(1.0,"CRIT","#f85149")]:
+        fig.add_annotation(x=forecast_df["date"].iloc[-1], y=thresh - 0.05,
+            text=label, showarrow=False, font=dict(size=9, color=color), xanchor="right")
+
+    return dark_layout(fig, "Diesel Shock Index (30일)", h=220)
+
+
+def chart_vulnerability_hist(unit_df):
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=unit_df["vulnerability_score"], nbinsx=40,
+        marker_color="#58a6ff", opacity=0.8, name="영업소 분포"))
+
+    for q, color, label in [(0.50,"#3fb950","p50"),(0.90,"#d29922","p90"),(0.95,"#f85149","p95")]:
+        val = unit_df["vulnerability_score"].quantile(q)
+        fig.add_vline(x=val, line=dict(color=color, width=1.5, dash="dash"))
+        fig.add_annotation(x=val, y=0, text=label, showarrow=False,
+            font=dict(size=9, color=color), xshift=6, yshift=20)
+
+    return dark_layout(fig, "Vulnerability Score 분포 (전체 영업소)", h=240)
+
+
+def chart_route_impact(impact_df):
+    route_agg = impact_df.groupby("routeName").agg(
+        mean_impact=("impact_score_mean","mean"),
+        count=("unitCode","count"),
+        vh=("impact_grade", lambda x: (x=="Very High").sum())
+    ).sort_values("mean_impact", ascending=True).tail(11)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=route_agg.index, x=route_agg["mean_impact"],
+        orientation="h",
+        marker=dict(
+            color=route_agg["mean_impact"],
+            colorscale=[[0,"#1f3050"],[0.5,"#1f4e79"],[1,"#f85149"]],
+            showscale=False),
+        text=[f"{v:.4f}" for v in route_agg["mean_impact"]],
+        textposition="outside",
+        textfont=dict(size=10, color="#8b949e"),
+        customdata=route_agg[["count","vh"]].values,
+        hovertemplate="<b>%{y}</b><br>Impact Score: %{x:.4f}<br>영업소: %{customdata[0]}개<br>Very High: %{customdata[1]}개<extra></extra>"))
+
+    h = max(280, len(route_agg) * 32)
+    fig.update_layout(
+        plot_bgcolor=DARK["bg"], paper_bgcolor=DARK["paper"],
+        font=DARK["font"], height=h, margin=dict(l=130, r=60, t=30, b=20),
+        xaxis=dict(gridcolor=DARK["grid"], linecolor=DARK["grid"]),
+        yaxis=dict(gridcolor=DARK["grid"], linecolor=DARK["grid"]),
+    )
+    return fig
+
+
+def chart_tcs_war_comparison(tcs_df):
+    weekly = tcs_df.copy()
+    weekly["weekday"] = pd.to_datetime(weekly["date"]).dt.day_name()
+    wd_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+    wd_map   = {"Monday":"월","Tuesday":"화","Wednesday":"수","Thursday":"목",
+                "Friday":"금","Saturday":"토","Sunday":"일"}
+
+    grp = weekly.groupby(["war_period","weekday"])["freight_traffic"].mean().reset_index()
+    grp["weekday_kr"] = grp["weekday"].map(wd_map)
+    grp["weekday_order"] = grp["weekday"].map({w:i for i,w in enumerate(wd_order)})
+    grp = grp.sort_values("weekday_order")
+
+    fig = go.Figure()
+    for period, color, dash in [("전쟁 이전","#58a6ff","solid"),("전쟁 이후","#f85149","dash")]:
+        d = grp[grp["war_period"]==period]
+        fig.add_trace(go.Scatter(
+            x=d["weekday_kr"], y=d["freight_traffic"],
+            name=period, mode="lines+markers",
+            line=dict(color=color, width=2, dash=dash),
+            marker=dict(size=7, color=color),
+        ))
+
+    return dark_layout(fig, "전쟁 전후 요일별 화물 교통량", h=280)
+
+
+def chart_lisa_donut(impact_df):
+    counts = impact_df["lisa_cluster"].value_counts()
+    colors_map = {
+        "High-High":"#f05252","Low-Low":"#5b6af0",
+        "High-Low":"#e8a530","Low-High":"#67bfff","Not Significant":"#4e5468"
+    }
+    c_list = [colors_map.get(k,"#8b949e") for k in counts.index]
+
+    fig = go.Figure(go.Pie(
+        labels=counts.index, values=counts.values,
+        hole=0.55, marker=dict(colors=c_list, line=dict(color="#0d1117", width=2)),
+        textfont=dict(size=10), textposition="outside",
+        hovertemplate="<b>%{label}</b><br>%{value}개 (%{percent})<extra></extra>"))
+
+    fig.update_layout(
+        plot_bgcolor=DARK["bg"], paper_bgcolor=DARK["paper"],
+        font=DARK["font"], height=260, margin=dict(l=10, r=10, t=30, b=10),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10, color=DARK["text"]),
+                    orientation="v", x=1.0, y=0.5),
+        annotations=[dict(text="LISA", x=0.5, y=0.5, showarrow=False,
+                          font=dict(size=14, color="#e6edf3", family="JetBrains Mono"))]
+    )
+    return fig
+
+
+def chart_impact_scatter(impact_df):
+    color_map = {"Very High":"#f85149","High":"#f0883e","Moderate":"#d29922","Low":"#58a6ff"}
+    fig = go.Figure()
+    for grade, color in color_map.items():
+        d = impact_df[impact_df["impact_grade"]==grade]
+        fig.add_trace(go.Scatter(
+            x=d["vulnerability_score"], y=d["impact_score_mean"],
+            mode="markers", name=grade,
+            marker=dict(color=color, size=5, opacity=0.75,
+                        line=dict(width=0.3, color="#0d1117")),
+            customdata=d[["unitName","routeName"]].values,
+            hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br>취약성: %{x:.4f}<br>충격: %{y:.4f}<extra></extra>"))
+
+    return dark_layout(fig, "취약성 vs 충격 점수 산점도", h=300)
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  GIS 지도 레이어 (pydeck)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+MAPBOX_STYLE = "mapbox://styles/mapbox/dark-v11"
+
+GRADE_COLORS = {
+    "Very High": [240, 82, 82, 230],
+    "High":      [232, 165, 48, 200],
+    "Moderate":  [52, 199, 123, 160],
+    "Low":       [91, 106, 240, 130],
+}
+LISA_COLORS = {
+    "High-High":      [240, 82, 82, 230],
+    "Low-Low":        [91, 106, 240, 210],
+    "High-Low":       [232, 165, 48, 200],
+    "Low-High":       [103, 191, 255, 170],
+    "Not Significant":[78, 84, 104, 120],
+}
+
+
+def make_vulnerability_map(impact_df, selected_routes=None, map_mode="impact"):
+    df = impact_df.copy()
+    if selected_routes:
+        df = df[df["routeName"].isin(selected_routes)]
+
+    if map_mode == "impact":
+        df["color"] = df["impact_grade"].map(GRADE_COLORS)
+        df["radius"] = (df["impact_score_mean"] / df["impact_score_mean"].max() * 12000 + 3000).clip(3000, 18000)
+        col_field = "impact_score_mean"
+    elif map_mode == "vulnerability":
+        df["color"] = df["vulnerability_grade"].map(GRADE_COLORS)
+        df["radius"] = (df["vulnerability_score"] / df["vulnerability_score"].max() * 12000 + 3000).clip(3000, 18000)
+        col_field = "vulnerability_score"
+    else:  # LISA
+        df["color"] = df["lisa_cluster"].map(LISA_COLORS)
+        df["radius"] = 6000
+        col_field = "vulnerability_score"
+
+    scatter_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=df,
+        get_position=["lon", "lat"],
+        get_radius="radius",
+        get_fill_color="color",
+        get_line_color=[30, 36, 43, 200],
+        line_width_min_pixels=1,
+        pickable=True,
+        auto_highlight=True,
+        highlight_color=[255, 255, 255, 80],
+    )
+
+    # 상위 10개 영업소 강조 레이어
+    top10 = df.nlargest(10, col_field)
+    ring_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=top10,
+        get_position=["lon", "lat"],
+        get_radius=15000,
+        get_fill_color=[0, 0, 0, 0],
+        get_line_color=[248, 81, 73, 255],
+        line_width_min_pixels=2.5,
+        stroked=True,
+        filled=False,
+        pickable=False,
+    )
+
+    # 텍스트 레이어 (상위 10개 이름)
+    text_layer = pdk.Layer(
+        "TextLayer",
+        data=top10,
+        get_position=["lon", "lat"],
+        get_text="unitName",
+        get_size=12,
+        get_color=[230, 237, 243, 230],
+        get_alignment_baseline="'bottom'",
+        get_pixel_offset=[0, -18],
+        font_family="Noto Sans KR",
+    )
+
+    view_state = pdk.ViewState(
+        latitude=36.5, longitude=127.8,
+        zoom=6.2, pitch=30, bearing=0
+    )
+
+    tooltip = {
+        "html": """
+        <div style='background:#161b22;border:1px solid #30363d;border-radius:8px;
+                    padding:10px 14px;font-family:sans-serif;min-width:200px'>
+          <div style='font-size:14px;font-weight:700;color:#e6edf3;margin-bottom:6px'>
+            {unitName}
+          </div>
+          <div style='font-size:11px;color:#8b949e;margin-bottom:8px'>{routeName}</div>
+          <div style='display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px'>
+            <span style='color:#8b949e'>취약성 점수</span>
+            <span style='color:#58a6ff;font-family:monospace'>{vulnerability_score}</span>
+            <span style='color:#8b949e'>충격 점수</span>
+            <span style='color:#f0883e;font-family:monospace'>{impact_score_mean}</span>
+            <span style='color:#8b949e'>화물 비율</span>
+            <span style='color:#e6edf3;font-family:monospace'>{mean_freight_share}</span>
+            <span style='color:#8b949e'>LISA 클러스터</span>
+            <span style='color:#bc8cff;font-family:monospace'>{lisa_cluster}</span>
+          </div>
+        </div>
+        """,
+        "style": {"background": "transparent", "border": "none"},
+    }
+
+    deck = pdk.Deck(
+        layers=[scatter_layer, ring_layer, text_layer],
+        initial_view_state=view_state,
+        map_style=MAPBOX_STYLE,
+        tooltip=tooltip,
+    )
+    return deck
+
+
+def make_heatmap(impact_df):
+    """Heatmap 레이어 (화물 집중도)"""
+    df = impact_df.copy()
+    df["weight"] = df["impact_score_mean"] / df["impact_score_mean"].max()
+
+    heat_layer = pdk.Layer(
+        "HeatmapLayer",
+        data=df,
+        get_position=["lon", "lat"],
+        get_weight="weight",
+        aggregation="SUM",
+        radiusPixels=60,
+        intensity=1.2,
+        threshold=0.1,
+        color_range=[
+            [1, 152, 189, 180], [73, 227, 206, 200],
+            [216, 254, 181, 200], [254, 237, 177, 200],
+            [254, 173, 84, 220], [209, 55, 78, 240],
+        ],
+    )
+
+    view_state = pdk.ViewState(
+        latitude=36.5, longitude=127.8, zoom=6.2, pitch=0
+    )
+    return pdk.Deck(
+        layers=[heat_layer],
+        initial_view_state=view_state,
+        map_style=MAPBOX_STYLE,
+    )
+
+
+def make_arc_map(impact_df):
+    """Arc 레이어 — 고위험 영업소 간 위험 연계 시각화"""
+    hh = impact_df[impact_df["lisa_cluster"]=="High-High"].copy()
+    if len(hh) < 2:
+        return make_heatmap(impact_df)
+
+    center_lat = hh["lat"].mean()
+    center_lon = hh["lon"].mean()
+
+    arcs = []
+    for _, row in hh.iterrows():
+        score = row["impact_score_mean"]
+        arcs.append({
+            "s_lat": center_lat, "s_lon": center_lon,
+            "t_lat": row["lat"],  "t_lon": row["lon"],
+            "score": score,
+        })
+
+    arc_df = pd.DataFrame(arcs)
+
+    arc_layer = pdk.Layer(
+        "ArcLayer",
+        data=arc_df,
+        get_source_position=["s_lon", "s_lat"],
+        get_target_position=["t_lon", "t_lat"],
+        get_source_color=[248, 81, 73, 160],
+        get_target_color=[88, 166, 255, 160],
+        auto_highlight=True,
+        width_scale=0.0001,
+        get_width="score",
+        width_min_pixels=1,
+        width_max_pixels=6,
+    )
+
+    scatter = pdk.Layer(
+        "ScatterplotLayer", data=hh,
+        get_position=["lon", "lat"],
+        get_fill_color=[248, 81, 73, 200],
+        get_radius=8000, pickable=True,
+    )
+
+    view_state = pdk.ViewState(latitude=36.5, longitude=127.8, zoom=6.0, pitch=45)
+    return pdk.Deck(
+        layers=[arc_layer, scatter],
+        initial_view_state=view_state,
+        map_style=MAPBOX_STYLE,
+    )
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  메인 UI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    # ── data ─────────────────────────────────────────────────────────────────
+    energy_df   = load_energy_data()
+    forecast_df = build_forecast(energy_df)
+    unit_df     = build_unit_data()
+    impact_df, mean_shock, max_shock = build_impact_score(unit_df, forecast_df)
+    tcs_df      = build_tcs_timeseries()
+
+    last_diesel  = energy_df["diesel_price"].iloc[-1]
+    first_diesel = energy_df["diesel_price"].iloc[0]
+    diesel_delta = (last_diesel / first_diesel - 1) * 100
+    vh_count     = (impact_df["impact_grade"] == "Very High").sum()
+    hh_count     = (impact_df["lisa_cluster"] == "High-High").sum()
+
+    # ── SIDEBAR ───────────────────────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown(f"""
+        <div class="sb-logo">
+          <div class="sb-logo-icon">🛣️</div>
+          <div>
+            <div class="sb-logo-title">LogisRisk</div>
+            <div class="sb-logo-sub">Expressway Intelligence · v2.0</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<div class="sb-section">System status</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f'<div class="sb-stat success"><div class="sb-stat-val">{len(impact_df):,}</div><div class="sb-stat-lbl">영업소</div></div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown(f'<div class="sb-stat danger"><div class="sb-stat-val">{vh_count}</div><div class="sb-stat-lbl">Very High</div></div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="sb-section">Map layer</div>', unsafe_allow_html=True)
+        map_mode = st.selectbox("레이어",
+            ["impact","vulnerability","lisa","heatmap","arc"],
+            format_func=lambda x: {
+                "impact":        "Fuel Shock Impact",
+                "vulnerability": "Vulnerability Score",
+                "lisa":          "LISA Cluster",
+                "heatmap":       "Heatmap",
+                "arc":           "Arc (HH Network)",
+            }[x], label_visibility="collapsed")
+
+        all_routes = sorted(impact_df["routeName"].unique())
+        st.markdown('<div class="sb-section">Route filter</div>', unsafe_allow_html=True)
+        selected_routes = st.multiselect("노선", all_routes, default=[], label_visibility="collapsed")
+
+        st.markdown('<div class="sb-section">Analysis filter</div>', unsafe_allow_html=True)
+        grade_filter = st.multiselect("등급",
+            ["Very High","High","Moderate","Low"],
+            default=["Very High","High"], label_visibility="collapsed")
+        score_range = st.slider("Impact Score",
+            float(impact_df["impact_score_mean"].min()),
+            float(impact_df["impact_score_mean"].max()),
+            (float(impact_df["impact_score_mean"].min()),
+             float(impact_df["impact_score_mean"].max())),
+            step=0.0001, format="%.4f")
+
+        st.markdown('<div class="sb-section">Forecast config</div>', unsafe_allow_html=True)
+        forecast_horizon = st.slider("예측 기간 (일)", 7, 30, 30)
+        prophet_weight   = st.slider("Prophet 가중치", 0.1, 0.9, 0.4, step=0.05)
+
+        st.markdown('<div class="sb-section">Dataset</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="font-size:11px;color:var(--text-3);line-height:2.1">
+          기간 &nbsp;<span style="color:var(--text-1)">2025.01 – 2026.05</span><br>
+          TCS  &nbsp;<span style="color:var(--text-1)">462,160 건</span><br>
+          영업소 <span style="color:var(--text-1)">476 개소</span><br>
+          전쟁  &nbsp;<span style="color:var(--red)">2026-02-28</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── TOP BAR ───────────────────────────────────────────────────────────────
+    st.markdown(f"""
+    <div class="topbar">
+      <div class="topbar-left">
+        <div>
+          <div class="topbar-eyebrow">Expressway Logistics Intelligence</div>
+          <div class="topbar-title">물류 취약성 & 유류충격 분석 시스템</div>
+          <div class="topbar-sub">Model A (Prophet + LSTM) &nbsp;·&nbsp; Model B (Vulnerability) &nbsp;·&nbsp; Integrated Impact Pipeline</div>
+        </div>
+      </div>
+      <div class="topbar-pill">
+        <div class="topbar-pill-dot"></div>
+        <span class="topbar-pill-label">LIVE</span>
+        <span class="topbar-pill-time">{datetime.now().strftime('%H:%M')} KST</span>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── ALERT BANNERS ─────────────────────────────────────────────────────────
+    critical_count = (forecast_df["risk_level"] == "CRITICAL").sum()
+    if critical_count > 0:
+        st.markdown(f"""
+        <div class="alert critical">
+          <div class="alert-icon">⚠</div>
+          <div class="alert-body">
+            <div class="alert-title">CRITICAL ALERT</div>
+            <div class="alert-msg">향후 30일 중 <strong>{critical_count}일</strong>이 CRITICAL 위험 등급(Shock Index ≥ 0.80)으로 예측됩니다. Very High 등급 영업소 즉각 점검 권고.</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+    elif mean_shock > 0.6:
+        st.markdown(f"""
+        <div class="alert warning">
+          <div class="alert-icon">⚡</div>
+          <div class="alert-body">
+            <div class="alert-title">HIGH WARNING</div>
+            <div class="alert-msg">30일 평균 Diesel Shock Index <strong>{mean_shock:.3f}</strong> — HIGH 위험 구간 진입.</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── KPI ROW ───────────────────────────────────────────────────────────────
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    kpi_data = [
+        (k1, "현재 경유가", f"{last_diesel:,.0f}원", f"{diesel_delta:+.1f}%", "up" if diesel_delta>0 else "down", "accent-red"),
+        (k2, "30일 예측 최고가", f"{forecast_df['ensemble'].max():,.0f}원", f"+{forecast_df['change_rate'].max():.1f}%", "up", "accent-red"),
+        (k3, "Shock Index (avg)", f"{mean_shock:.3f}", "HIGH" if mean_shock>0.6 else "MEDIUM", "up" if mean_shock>0.5 else "neutral", "accent-amber"),
+        (k4, "Very High 영업소", f"{vh_count}", f"{vh_count/len(impact_df)*100:.1f}%", "up", "accent-red"),
+        (k5, "HH 클러스터", f"{hh_count}", "LISA p<0.05", "neutral", "accent-blue"),
+        (k6, "WTI 현재가", f"${energy_df['wti'].iloc[-1]:.1f}", f"Brent ${energy_df['brent'].iloc[-1]:.1f}", "neutral", "accent-blue"),
+    ]
+    for col, label, val, delta, dir_, accent in kpi_data:
+        cls = "up" if dir_=="up" else ("down" if dir_=="down" else "neutral")
+        arrow = "↑" if dir_=="up" else ("↓" if dir_=="down" else "→")
+        with col:
+            st.markdown(f"""
+            <div class="kpi {accent}">
+              <div class="kpi-eyebrow">{label}</div>
+              <div class="kpi-value">{val}</div>
+              <span class="kpi-delta {cls}">{arrow} {delta}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+
+    # ── TABS ──────────────────────────────────────────────────────────────────
+    tab_gis, tab_energy, tab_model_b, tab_integration, tab_agent = st.tabs([
+        "  GIS 분석 지도  ",
+        "  에너지 & 예측  ",
+        "  물류 취약성  ",
+        "  통합 충격 분석  ",
+        "  AI 에이전트  ",
+    ])
+
+    # ════════════════════════════════════════════════════════
+    # TAB 1 · GIS
+    # ════════════════════════════════════════════════════════
+    with tab_gis:
+        MODE_META = {
+            "impact":        ("Fuel Shock Impact Score", "충격 점수 고·저를 색상으로 표현. 상위 10개 영업소는 링으로 강조."),
+            "vulnerability": ("Vulnerability Score", "화물 비율·교통량·변동성·불균형 가중 합산."),
+            "lisa":          ("LISA Spatial Cluster", "K=8 KNN · 999 permutations · p < 0.05"),
+            "heatmap":       ("Heatmap — 화물 집중도", "Impact Score 기반 커널 밀도."),
+            "arc":           ("Arc — HH 클러스터 연계망", "High-High 영업소와 중심점 간 위험 연계 시각화."),
+        }
+        m_title, m_desc = MODE_META[map_mode]
+        n_shown = len(impact_df[impact_df["routeName"].isin(selected_routes)]) if selected_routes else len(impact_df)
+
+        st.markdown(f"""
+        <div class="map-header">
+          <div>
+            <div class="map-title">{m_title}</div>
+            <div class="map-desc">{m_desc}</div>
+          </div>
+          <div class="map-badge">{n_shown:,} 영업소</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Legend chips
+        if map_mode in ("impact","vulnerability"):
+            grade_field = "impact_grade" if map_mode=="impact" else "vulnerability_grade"
+            items = [("Very High","#f05252"),("High","#e8a530"),("Moderate","#34c77b"),("Low","#5b6af0")]
+            chips = "".join(f"""<div class="legend-chip">
+              <div class="legend-dot" style="background:{c}"></div>
+              <span class="legend-name">{g}</span>
+              <span class="legend-count">{(impact_df[grade_field]==g).sum()}</span>
+            </div>""" for g,c in items)
+            st.markdown(f'<div class="legend-row">{chips}</div>', unsafe_allow_html=True)
+        elif map_mode == "lisa":
+            items = [("High-High","#f05252"),("Low-Low","#5b6af0"),("High-Low","#e8a530"),
+                     ("Low-High","#67bfff"),("Not Significant","#4e5468")]
+            chips = "".join(f"""<div class="legend-chip">
+              <div class="legend-dot" style="background:{c}"></div>
+              <span class="legend-name">{g}</span>
+              <span class="legend-count">{(impact_df["lisa_cluster"]==g).sum()}</span>
+            </div>""" for g,c in items)
+            st.markdown(f'<div class="legend-row">{chips}</div>', unsafe_allow_html=True)
+
+        # Map render
+        st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
+        if map_mode in ("impact","vulnerability","lisa"):
+            st.pydeck_chart(make_vulnerability_map(
+                impact_df,
+                selected_routes=selected_routes or None,
+                map_mode=map_mode,
+            ), use_container_width=True, height=540)
+        elif map_mode == "heatmap":
+            st.pydeck_chart(make_heatmap(impact_df), use_container_width=True, height=540)
+        else:
+            st.pydeck_chart(make_arc_map(impact_df), use_container_width=True, height=540)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+        # Below-map: table + chart
+        tc1, tc2 = st.columns([3, 2])
+        with tc1:
+            st.markdown('<div class="sec-head"><span class="sec-head-title">상위 20 취약 영업소</span><span class="sec-head-sub">Impact Score 내림차순</span></div>', unsafe_allow_html=True)
+            filtered = impact_df
+            if grade_filter:
+                filtered = filtered[filtered["impact_grade"].isin(grade_filter)]
+            filtered = filtered[
+                (filtered["impact_score_mean"] >= score_range[0]) &
+                (filtered["impact_score_mean"] <= score_range[1])
+            ]
+            top20 = filtered.nlargest(20, "impact_score_mean")[[
+                "unitName","routeName","impact_grade","impact_score_mean",
+                "vulnerability_score","lisa_cluster","mean_freight_share"
+            ]].copy()
+            top20["mean_freight_share"] = (top20["mean_freight_share"]*100).round(1).astype(str)+"%"
+            top20["impact_score_mean"]  = top20["impact_score_mean"].round(4)
+            top20["vulnerability_score"]= top20["vulnerability_score"].round(4)
+            top20.columns = ["영업소","노선","등급","충격점수","취약성","LISA","화물비율"]
+            GRADE_CSS = {
+                "Very High":"background-color:#1a0a0a;color:#f05252",
+                "High":"background-color:#1a1200;color:#e8a530",
+                "Moderate":"background-color:#041510;color:#34c77b",
+                "Low":"background-color:#0a0d20;color:#5b6af0",
+            }
+            styled = top20.style.applymap(lambda v: GRADE_CSS.get(v,""), subset=["등급"])
+            st.dataframe(styled, use_container_width=True, height=440)
+
+        with tc2:
+            st.markdown('<div class="sec-head"><span class="sec-head-title">노선별 평균 Impact Score</span></div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_route_impact(impact_df), use_container_width=True)
+
+    # ════════════════════════════════════════════════════════
+    # TAB 2 · ENERGY
+    # ════════════════════════════════════════════════════════
+    with tab_energy:
+        st.markdown('<div class="sec-head"><span class="sec-head-title">국제 에너지 지표 시계열</span><span class="sec-head-sub">2025.02 – 2026.05 · 전쟁 발발 2026-02-28</span></div>', unsafe_allow_html=True)
+        st.plotly_chart(chart_energy_timeline(energy_df), use_container_width=True)
+
+        ec1, ec2 = st.columns([3, 2])
+        with ec1:
+            st.markdown('<div class="sec-head" style="margin-top:8px"><span class="sec-head-title">30일 경유가 앙상블 예측</span><span class="sec-head-sub">Prophet 40% + LSTM 60%</span></div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_forecast(forecast_df.head(forecast_horizon)), use_container_width=True)
+            st.plotly_chart(chart_shock_index(forecast_df.head(forecast_horizon)), use_container_width=True)
+
+        with ec2:
+            st.markdown('<div class="sec-head" style="margin-top:8px"><span class="sec-head-title">예측 일별 상세</span></div>', unsafe_allow_html=True)
+            RC = {"LOW":"#34c77b","MEDIUM":"#e8a530","HIGH":"#f08030","CRITICAL":"#f05252"}
+            for _, row in forecast_df.head(forecast_horizon).iterrows():
+                rc = RC.get(row["risk_level"],"#5b6af0")
+                bar_pct = int(row["shock_index"]*100)
+                st.markdown(f"""
+                <div class="fc-row">
+                  <div class="fc-date">{row['date'].strftime('%m/%d')}</div>
+                  <div>
+                    <div class="fc-price">{row['ensemble']:.0f}<span style="font-size:9px;color:var(--text-3)">원</span></div>
+                  </div>
+                  <div class="fc-si" style="color:{rc}">SI {row['shock_index']:.3f}</div>
+                  <div class="fc-bar"><div class="fc-bar-fill" style="width:{bar_pct}%;background:{rc}"></div></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown('<div class="sec-head" style="margin-top:18px"><span class="sec-head-title">위험 등급 분포</span></div>', unsafe_allow_html=True)
+            rd = forecast_df.head(forecast_horizon)["risk_level"].value_counts()
+            for level, color in [("CRITICAL","#f05252"),("HIGH","#f08030"),("MEDIUM","#e8a530"),("LOW","#34c77b")]:
+                cnt = rd.get(level, 0); pct = cnt/forecast_horizon*100
+                st.markdown(f"""
+                <div class="grade-row">
+                  <div class="grade-label-wrap">
+                    <div class="grade-dot" style="background:{color}"></div>
+                    <span class="grade-label" style="color:{color}">{level}</span>
+                  </div>
+                  <div class="grade-bar-track">
+                    <div class="grade-bar-fill" style="width:{pct}%;background:{color}"></div>
+                  </div>
+                  <div class="grade-count">{cnt}일</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════
+    # TAB 3 · MODEL B
+    # ════════════════════════════════════════════════════════
+    with tab_model_b:
+        m1, m2, m3, m4 = st.columns(4)
+        for col, label, val, color in [
+            (m1, "분석 영업소", f"{len(unit_df):,}", "var(--text-1)"),
+            (m2, "Very High", f"{(unit_df['vulnerability_grade']=='Very High').sum()}", "var(--red)"),
+            (m3, "HH 클러스터", f"{hh_count}", "#bc8cff"),
+            (m4, "최고 취약성", f"{unit_df['vulnerability_score'].max():.4f}", "var(--amber)"),
+        ]:
+            with col:
+                st.markdown(f"""
+                <div style="background:var(--raised);border:1px solid var(--border);border-radius:12px;
+                             padding:14px 16px;text-align:center">
+                  <div style="font-family:var(--mono);font-size:22px;font-weight:500;color:{color};margin-bottom:4px">{val}</div>
+                  <div style="font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">{label}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+        bc1, bc2 = st.columns([3, 2])
+
+        with bc1:
+            st.markdown('<div class="sec-head"><span class="sec-head-title">TCS 일별 화물 교통량</span><span class="sec-head-sub">2025.01 – 2026.05</span></div>', unsafe_allow_html=True)
+            war_date = pd.Timestamp("2026-02-28")
+            fig_tcs = go.Figure()
+            for df_p, color, name in [
+                (tcs_df[tcs_df["war_period"]=="전쟁 이전"], "#5b6af0", "전쟁 이전"),
+                (tcs_df[tcs_df["war_period"]=="전쟁 이후"], "#f05252", "전쟁 이후"),
+            ]:
+                fig_tcs.add_trace(go.Scatter(x=df_p["date"], y=df_p["freight_traffic"],
+                    mode="lines", name=name, line=dict(color=color, width=1.2)))
+            fig_tcs.add_vline(x=war_date, line=dict(color="#f05252", width=1, dash="dash"))
+            fig_tcs.add_annotation(x=war_date, y=1, xref="x", yref="paper",
+                text="전쟁 발발", showarrow=False, font=dict(color="#f05252",size=10),
+                xanchor="left", xshift=5)
+            dark_layout(fig_tcs, h=270)
+            st.plotly_chart(fig_tcs, use_container_width=True)
+
+            st.markdown('<div class="sec-head"><span class="sec-head-title">요일별 화물 패턴</span><span class="sec-head-sub">전쟁 전후 비교</span></div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_tcs_war_comparison(tcs_df), use_container_width=True)
+
+        with bc2:
+            st.markdown('<div class="sec-head"><span class="sec-head-title">Vulnerability Score 분포</span></div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_vulnerability_hist(unit_df), use_container_width=True)
+
+            st.markdown('<div class="sec-head"><span class="sec-head-title">LISA 클러스터</span></div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_lisa_donut(impact_df), use_container_width=True)
+
+            st.markdown('<div class="sec-head" style="margin-top:8px"><span class="sec-head-title">구성 지표</span></div>', unsafe_allow_html=True)
+            IND = [
+                ("mean_freight_345_share",   "화물 비율",  "30%", "#f05252", "화물 의존 구조"),
+                ("mean_freight_345_traffic", "화물 교통량","30%", "#e8a530", "규모 노출도"),
+                ("traffic_volatility",       "교통 변동성","20%", "#34c77b", "충격 흡수 능력"),
+                ("abs_imbalance_ratio",      "흐름 불균형","20%", "#5b6af0", "구조적 비효율"),
+            ]
+            for col_key, lbl, wt, color, desc in IND:
+                st.markdown(f"""
+                <div class="ind-card">
+                  <div class="ind-ring" style="background:{color}18;border:1.5px solid {color};color:{color}">{wt}</div>
+                  <div>
+                    <div class="ind-title">{lbl}</div>
+                    <div class="ind-desc">{desc}</div>
+                    <div class="ind-code">{col_key}</div>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # War stats row
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        pre_m  = tcs_df[tcs_df["war_period"]=="전쟁 이전"]["freight_traffic"].mean()
+        post_m = tcs_df[tcs_df["war_period"]=="전쟁 이후"]["freight_traffic"].mean()
+        chg    = (post_m/pre_m-1)*100
+        pre_s  = tcs_df[tcs_df["war_period"]=="전쟁 이전"]["freight_share"].mean()*100
+        post_s = tcs_df[tcs_df["war_period"]=="전쟁 이후"]["freight_share"].mean()*100
+
+        st.markdown('<div class="sec-head"><span class="sec-head-title">전쟁 전후 교통량 비교</span></div>', unsafe_allow_html=True)
+        wc = st.columns(4)
+        for col, lbl, val, color in [
+            (wc[0], "이전 화물량 (일평균)", f"{pre_m:,.0f}대", "#5b6af0"),
+            (wc[1], "이후 화물량 (일평균)", f"{post_m:,.0f}대", "#f05252"),
+            (wc[2], "변화율", f"{chg:+.1f}%", "#e8a530" if chg>0 else "#34c77b"),
+            (wc[3], "화물 비율 변화", f"{pre_s:.2f}% → {post_s:.2f}%", "#bc8cff"),
+        ]:
+            with col:
+                st.markdown(f"""
+                <div style="background:var(--raised);border:1px solid var(--border);
+                             border-radius:12px;padding:12px 16px">
+                  <div style="font-size:9px;color:var(--text-3);text-transform:uppercase;
+                               letter-spacing:.08em;margin-bottom:5px">{lbl}</div>
+                  <div style="font-family:var(--mono);font-size:17px;font-weight:500;color:{color}">{val}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════
+    # TAB 4 · INTEGRATION
+    # ════════════════════════════════════════════════════════
+    with tab_integration:
+        st.markdown("""
+        <div class="formula-banner">
+          <div class="formula-label">통합 산출 공식</div>
+          <div class="formula-expr">Fuel Shock Impact Score = Vulnerability Score × Diesel Shock Index</div>
+          <div class="formula-note">동일한 유류 충격에서 화물 의존도가 높은 영업소의 비용 충격이 배가됩니다.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        ic1, ic2 = st.columns([3, 2])
+        with ic1:
+            st.markdown('<div class="sec-head"><span class="sec-head-title">취약성 vs 충격점수</span><span class="sec-head-sub">영업소 산점도</span></div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_impact_scatter(impact_df), use_container_width=True)
+
+            st.markdown('<div class="sec-head"><span class="sec-head-title">시나리오 비교</span><span class="sec-head-sub">기본(30일 평균) vs 최악(30일 최대)</span></div>', unsafe_allow_html=True)
+            fig_sc = go.Figure()
+            grade_order = ["Low","Moderate","High","Very High"]
+            sc_colors   = ["#5b6af0","#e8a530","#f08030","#f05252"]
+            scale = max_shock / (mean_shock + 1e-8)
+            worst_score = impact_df["impact_score_mean"] * scale
+            qv = worst_score.quantile([0.50,0.90,0.95])
+            def wgrade(v):
+                if v >= qv.iloc[2]: return "Very High"
+                elif v >= qv.iloc[1]: return "High"
+                elif v >= qv.iloc[0]: return "Moderate"
+                return "Low"
+            for grade, color in zip(grade_order, sc_colors):
+                base_c  = (impact_df["impact_grade"]==grade).sum()
+                worst_c = (worst_score.apply(wgrade)==grade).sum()
+                fig_sc.add_trace(go.Bar(
+                    name=grade, x=["기본 시나리오","최악 시나리오"],
+                    y=[base_c, worst_c], marker_color=color,
+                    text=[base_c, worst_c], textposition="outside",
+                    textfont=dict(size=11, color="#f0f2f8"),
+                ))
+            fig_sc.update_layout(
+                barmode="stack", plot_bgcolor="#08090c", paper_bgcolor="#08090c",
+                font=dict(family="DM Sans", color="#8b91a8", size=11), height=270,
+                legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=1.05,
+                            font=dict(size=10)),
+                margin=dict(l=30, r=20, t=40, b=20),
+                xaxis=dict(gridcolor="#1c1e27"),
+                yaxis=dict(gridcolor="#1c1e27", title="영업소 수"),
+            )
+            st.plotly_chart(fig_sc, use_container_width=True)
+
+        with ic2:
+            st.markdown('<div class="sec-head"><span class="sec-head-title">등급별 현황</span></div>', unsafe_allow_html=True)
+            grade_def = [
+                ("Very High","#f05252","badge-vh"),
+                ("High",     "#e8a530","badge-hi"),
+                ("Moderate", "#34c77b","badge-mod"),
+                ("Low",      "#5b6af0","badge-low"),
+            ]
+            for grade, color, badge_cls in grade_def:
+                cnt = (impact_df["impact_grade"]==grade).sum()
+                pct = cnt / len(impact_df) * 100
+                avg = impact_df[impact_df["impact_grade"]==grade]["impact_score_mean"].mean()
+                st.markdown(f"""
+                <div class="impact-card">
+                  <div class="impact-card-top">
+                    <span class="badge {badge_cls}">{grade}</span>
+                    <div class="impact-card-num" style="color:{color}">{cnt}</div>
+                  </div>
+                  <div class="impact-card-meta">
+                    <span>전체 중 {pct:.1f}%</span>
+                    <span>평균 점수 {avg:.4f}</span>
+                  </div>
+                  <div class="impact-card-bar">
+                    <div class="impact-card-bar-fill" style="width:{pct}%;background:{color}"></div>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown('<div class="sec-head" style="margin-top:18px"><span class="sec-head-title">Shock Index 요약</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            for k, v in [
+                ("30일 평균", f"{mean_shock:.4f}"),
+                ("30일 최대", f"{max_shock:.4f}"),
+                ("최고 예측가", f"{forecast_df['ensemble'].max():.0f} 원/L"),
+                ("최대 변화율", f"+{forecast_df['change_rate'].max():.2f}%"),
+            ]:
+                st.markdown(f'<div class="stat-row"><span class="stat-key">{k}</span><span class="stat-val">{v}</span></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # VH table
+        st.markdown('<div class="sec-head" style="margin-top:20px"><span class="sec-head-title">Very High 등급 전체 영업소</span><span class="sec-head-sub">즉각 정책 개입 대상</span></div>', unsafe_allow_html=True)
+        vh = impact_df[impact_df["impact_grade"]=="Very High"].sort_values("impact_score_mean", ascending=False)[[
+            "unitName","routeName","impact_score_mean","impact_score_max",
+            "vulnerability_score","vulnerability_grade","lisa_cluster",
+            "mean_freight_share","traffic_volatility","abs_imbalance_ratio",
+        ]].copy()
+        vh["mean_freight_share"]  = (vh["mean_freight_share"]*100).round(1).astype(str)+"%"
+        vh["impact_score_mean"]   = vh["impact_score_mean"].round(4)
+        vh["impact_score_max"]    = vh["impact_score_max"].round(4)
+        vh["vulnerability_score"] = vh["vulnerability_score"].round(4)
+        vh["traffic_volatility"]  = vh["traffic_volatility"].round(3)
+        vh["abs_imbalance_ratio"] = vh["abs_imbalance_ratio"].round(3)
+        vh.columns = ["영업소","노선","충격(기본)","충격(최악)","취약성","취약등급","LISA","화물비율","변동성","불균형"]
+        st.dataframe(vh, use_container_width=True, height=340)
+
+    # ════════════════════════════════════════════════════════
+    # TAB 5 · AI AGENT
+    # ════════════════════════════════════════════════════════
+    with tab_agent:
+        import re
+        ag1, ag2 = st.columns([3, 2])
+
+        with ag1:
+            TOOL_CHIPS = "".join(
+                f'<span class="agent-tool-chip">{t}</span>'
+                for t in AGENT_TOOLS
+            )
+            st.markdown(f"""
+            <div class="agent-header">
+              <div class="agent-avatar">🤖</div>
+              <div style="flex:1">
+                <div class="agent-name">LogisAI Agent</div>
+                <div class="agent-sub">
+                  <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+                                background:var(--green);margin-right:5px;vertical-align:middle"></span>
+                  분석 준비 완료 &nbsp;·&nbsp; ReAct 패턴 &nbsp;·&nbsp; 6 Tools
+                </div>
+                <div class="agent-tools-row">{TOOL_CHIPS}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # chat init
+            if "chat_history" not in st.session_state:
+                st.session_state.chat_history = [{
+                    "role":"agent",
+                    "content":(
+                        f"안녕하세요, **LogisAI**입니다.\n\n"
+                        f"현재 **{len(impact_df)}개** 영업소 분석 완료 — "
+                        f"Very High **{vh_count}개소**, HH 클러스터 **{hh_count}개소**, "
+                        f"Shock Index 평균 **{mean_shock:.3f}**.\n\n"
+                        "경유가 예측, 취약성 랭킹, LISA 분석, 전쟁 전후 비교, 시나리오 비교를 질문해 보세요."
+                    ),
+                    "thinking": None,
+                }]
+
+            # render chat
+            chat_html = '<div class="chat-wrap">'
+            for msg in st.session_state.chat_history:
+                if msg["role"] == "user":
+                    chat_html += f'<div class="msg-user">{msg["content"]}</div>'
+                else:
+                    think_html = ""
+                    if msg.get("thinking"):
+                        for stype, sdata, _ in msg["thinking"]:
+                            if stype != "💬 최종 응답":
+                                think_html += f'<div class="think-step"><span class="think-label">{stype}</span> → {sdata}</div>'
+                    content = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>',
+                                     msg["content"].replace("\n","<br>"))
+                    chat_html += f"""
+                    <div class="msg-agent">
+                      <div class="msg-agent-name">LogisAI</div>
+                      {think_html}
+                      {content}
+                    </div>"""
+            chat_html += "</div>"
+            st.markdown(chat_html, unsafe_allow_html=True)
+
+            # quick questions
+            st.markdown('<div class="quick-btn-label">빠른 질문</div>', unsafe_allow_html=True)
+            QQ = ["경유가 예측 결과","취약성 상위 영업소","LISA 클러스터 현황",
+                  "전쟁 전후 변화","시나리오 비교","노선별 위험 분석"]
+            qc = st.columns(3)
+            for i, q in enumerate(QQ):
+                with qc[i % 3]:
+                    if st.button(q, key=f"qq_{i}", use_container_width=True):
+                        st.session_state["pending_query"] = q
+                        st.rerun()
+
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            user_input = st.text_input("질문 입력",
+                placeholder="예: 경유가 예측 결과 알려줘",
+                key="agent_input", label_visibility="collapsed")
+            sc1, sc2 = st.columns([4,1])
+            with sc1:
+                send_btn = st.button("전송 ↗", key="send_btn", use_container_width=True, type="primary")
+            with sc2:
+                if st.button("초기화", key="clr_btn", use_container_width=True):
+                    st.session_state.chat_history = st.session_state.chat_history[:1]
+                    st.rerun()
+
+            # process
+            query = None
+            if "pending_query" in st.session_state:
+                query = st.session_state.pop("pending_query")
+            elif send_btn and user_input.strip():
+                query = user_input.strip()
+            if query:
+                st.session_state.chat_history.append({"role":"user","content":query,"thinking":None})
+                with st.spinner("분석 중…"):
+                    time.sleep(0.6)
+                    steps = agent_think(query, impact_df, forecast_df, tcs_df)
+                st.session_state.chat_history.append({
+                    "role":"agent","content":steps[-1][1],"thinking":steps[:-1],
+                })
+                st.rerun()
+
+        with ag2:
+            st.markdown('<div class="sec-head"><span class="sec-head-title">사용 가능 도구</span></div>', unsafe_allow_html=True)
+            TICONS = {"경유가_예측_조회":"📈","취약성_랭킹_조회":"🏆",
+                      "노선별_위험_분석":"🛣️","LISA_클러스터_조회":"🗺️",
+                      "시나리오_비교":"⚖️","전쟁전후_비교":"⚔️"}
+            for name, desc in AGENT_TOOLS.items():
+                icon = TICONS.get(name,"🔧")
+                st.markdown(f"""
+                <div class="tool-card">
+                  <div class="tool-card-top">
+                    <span class="tool-card-icon">{icon}</span>
+                    <span class="tool-card-name">{name}</span>
+                  </div>
+                  <div class="tool-card-desc">{desc}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown('<div class="sec-head" style="margin-top:18px"><span class="sec-head-title">분석 컨텍스트</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            for k, v in [
+                ("영업소 수", f"{len(impact_df):,}"),
+                ("Very High", f"{vh_count}개소"),
+                ("HH 클러스터", f"{hh_count}개소"),
+                ("Shock Index", f"{mean_shock:.4f}"),
+                ("최고 예측가", f"{forecast_df['ensemble'].max():.0f}원"),
+                ("WTI", f"${energy_df['wti'].iloc[-1]:.2f}"),
+                ("USD/KRW", f"₩{energy_df['usd_krw'].iloc[-1]:,.0f}"),
+                ("VIX", f"{energy_df['vix'].iloc[-1]:.2f}"),
+            ]:
+                st.markdown(f'<div class="ctx-row"><span class="ctx-key">{k}</span><span class="ctx-val">{v}</span></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="sec-head" style="margin-top:18px"><span class="sec-head-title">추론 체계</span></div>', unsafe_allow_html=True)
+            st.markdown("""
+            <div class="card" style="font-size:11px;color:var(--text-3);line-height:2.2">
+              <div style="color:var(--accent);font-family:var(--mono);font-size:10px;
+                           margin-bottom:8px">ReAct Pattern</div>
+              <div><span style="color:var(--text-1);font-weight:500">Observe</span> &nbsp;— 사용자 의도 분류</div>
+              <div><span style="color:var(--text-1);font-weight:500">Think</span> &nbsp;&nbsp;&nbsp;— 최적 도구 선택</div>
+              <div><span style="color:var(--text-1);font-weight:500">Act</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;— 분석 함수 실행</div>
+              <div><span style="color:var(--text-1);font-weight:500">Respond</span> — 데이터 기반 답변</div>
+              <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;color:var(--text-3)">
+                확장 예정: Anthropic API · 실시간 유가 · TCS 스트림 · PostgreSQL
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── FOOTER ────────────────────────────────────────────────────────────────
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align:center;font-size:10px;color:var(--text-3);padding:4px 0 12px;
+                 letter-spacing:.04em">
+      LogisRisk &nbsp;·&nbsp; Model A (Prophet + LSTM) &nbsp;·&nbsp; Model B (Vulnerability)
+      &nbsp;·&nbsp; GIS: pydeck + Mapbox &nbsp;·&nbsp; 한국도로공사 TCS · 오피넷 · Investing.com
+    </div>
+    """, unsafe_allow_html=True)
+
+
+
+if __name__ == "__main__":
+    main()
