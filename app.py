@@ -23,543 +23,248 @@ st.set_page_config(
 # ── CSS / 테마 ───────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=DM+Mono:wght@400;500&display=swap');
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TOKENS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* ── TOKENS ── */
 :root {
-  --bg:        #08090c;
-  --surface:   #0e1016;
-  --raised:    #13151d;
-  --border:    rgba(255,255,255,.07);
-  --border-hi: rgba(255,255,255,.14);
-  --text-1:    #f0f2f8;
-  --text-2:    #8b91a8;
-  --text-3:    #4e5468;
-  --accent:    #5b6af0;
-  --accent-lo: rgba(91,106,240,.12);
-  --red:       #f05252;
-  --red-lo:    rgba(240,82,82,.12);
-  --amber:     #e8a530;
-  --amber-lo:  rgba(232,165,48,.10);
-  --green:     #34c77b;
-  --green-lo:  rgba(52,199,123,.10);
-  --mono:      'DM Mono', monospace;
+  --bg:         #f8f9fc;
+  --surface:    #ffffff;
+  --raised:     #f2f4f8;
+  --border:     rgba(0,0,0,.08);
+  --border-hi:  rgba(0,0,0,.16);
+  --text-1:     #0f1117;
+  --text-2:     #5a6178;
+  --text-3:     #9aa0b4;
+  --accent:     #2b50d8;
+  --accent-lo:  rgba(43,80,216,.08);
+  --red:        #d93025;
+  --red-lo:     rgba(217,48,37,.08);
+  --amber:      #c47d00;
+  --amber-lo:   rgba(196,125,0,.08);
+  --green:      #1a7f4b;
+  --green-lo:   rgba(26,127,75,.08);
+  --mono:       'DM Mono', monospace;
+  --shadow-sm:  0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:  0 4px 12px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.04);
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   RESET / BASE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 html, body, [class*="css"], [class*="st-"] {
   font-family: 'DM Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 .stApp { background: var(--bg) !important; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SIDEBAR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* ── SIDEBAR ── */
 section[data-testid="stSidebar"] {
   background: var(--surface) !important;
   border-right: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 section[data-testid="stSidebar"] .stSelectbox label,
 section[data-testid="stSidebar"] .stMultiSelect label,
 section[data-testid="stSidebar"] .stSlider label {
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  letter-spacing: .06em !important;
-  color: var(--text-2) !important;
+  font-size: 11px !important; font-weight: 600 !important;
+  letter-spacing: .06em !important; color: var(--text-3) !important;
   text-transform: uppercase !important;
 }
-section[data-testid="stSidebar"] [data-baseweb="select"] > div,
-section[data-testid="stSidebar"] [data-baseweb="multi-select"] > div {
+section[data-testid="stSidebar"] [data-baseweb="select"] > div {
   background: var(--raised) !important;
   border: 1px solid var(--border) !important;
-  border-radius: 8px !important;
-  color: var(--text-1) !important;
-}
-section[data-testid="stSidebar"] [data-baseweb="select"]:hover > div {
-  border-color: var(--border-hi) !important;
+  border-radius: 8px !important; color: var(--text-1) !important;
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SIDEBAR HELPERS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.sb-logo {
-  display: flex; align-items: center; gap: 12px;
-  padding: 20px 0 18px; margin-bottom: 2px;
-  border-bottom: 1px solid var(--border);
-}
-.sb-logo-icon {
-  width: 38px; height: 38px; border-radius: 10px;
-  background: var(--accent-lo); border: 1px solid var(--accent);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; flex-shrink: 0;
-}
-.sb-logo-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--text-1); line-height: 1.2; }
-.sb-logo-sub   { font-size: 10px; color: var(--text-3); letter-spacing: .04em; margin-top: 2px; }
+/* ── SIDEBAR HELPERS ── */
+.sb-logo { display:flex; align-items:center; gap:12px; padding:20px 0 18px; border-bottom:1px solid var(--border); margin-bottom:2px; }
+.sb-logo-icon { width:38px; height:38px; border-radius:10px; background:var(--accent-lo); border:1px solid rgba(43,80,216,.2); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.sb-logo-title { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:var(--text-1); line-height:1.2; }
+.sb-logo-sub   { font-size:10px; color:var(--text-3); letter-spacing:.04em; margin-top:2px; }
+.sb-section    { font-size:9px; font-weight:700; letter-spacing:.12em; color:var(--text-3); text-transform:uppercase; padding:18px 0 8px; border-bottom:1px solid var(--border); margin-bottom:12px; }
+.sb-stat       { background:var(--raised); border:1px solid var(--border); border-radius:10px; padding:10px 14px; text-align:center; flex:1; }
+.sb-stat-val   { font-family:var(--mono); font-size:20px; font-weight:500; color:var(--text-1); line-height:1; margin-bottom:4px; }
+.sb-stat-lbl   { font-size:9px; color:var(--text-3); letter-spacing:.06em; text-transform:uppercase; }
+.sb-stat.danger  { border-color:rgba(217,48,37,.2); } .sb-stat.danger  .sb-stat-val { color:var(--red); }
+.sb-stat.success .sb-stat-val { color:var(--green); }
 
-.sb-section {
-  font-size: 9px; font-weight: 600; letter-spacing: .12em;
-  color: var(--text-3); text-transform: uppercase;
-  padding: 20px 0 8px; border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
-}
+/* ── TOP BAR ── */
+.topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 28px; margin:-1rem -1rem 24px; background:var(--surface); border-bottom:1px solid var(--border); box-shadow:var(--shadow-sm); }
+.topbar-left { display:flex; align-items:center; gap:16px; }
+.topbar-eyebrow { font-size:9px; font-weight:700; letter-spacing:.14em; color:var(--accent); text-transform:uppercase; margin-bottom:4px; }
+.topbar-title { font-family:'Syne',sans-serif; font-size:18px; font-weight:700; color:var(--text-1); line-height:1; }
+.topbar-sub   { font-size:12px; color:var(--text-2); margin-top:3px; }
+.topbar-pill  { display:flex; align-items:center; gap:6px; background:var(--raised); border:1px solid var(--border); border-radius:100px; padding:6px 14px; box-shadow:var(--shadow-sm); }
+.topbar-pill-dot { width:6px; height:6px; border-radius:50%; background:var(--green); flex-shrink:0; box-shadow:0 0 0 3px var(--green-lo); animation:live-pulse 2.4s ease-in-out infinite; }
+@keyframes live-pulse { 0%,100%{box-shadow:0 0 0 3px var(--green-lo);} 50%{box-shadow:0 0 0 6px transparent;} }
+.topbar-pill-label { font-size:11px; color:var(--green); font-weight:600; }
+.topbar-pill-time  { font-family:var(--mono); font-size:11px; color:var(--text-3); margin-left:4px; }
 
-.sb-stat {
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 10px; padding: 10px 14px;
-  text-align: center; flex: 1;
-}
-.sb-stat-val { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--text-1); line-height: 1; margin-bottom: 4px; }
-.sb-stat-lbl { font-size: 9px; color: var(--text-3); letter-spacing: .06em; text-transform: uppercase; }
-.sb-stat.danger  { border-color: rgba(240,82,82,.3); }
-.sb-stat.danger  .sb-stat-val { color: var(--red); }
-.sb-stat.success .sb-stat-val { color: var(--green); }
+/* ── ALERTS ── */
+.alert { display:flex; align-items:flex-start; gap:12px; border-radius:12px; padding:13px 16px; margin-bottom:16px; }
+.alert-icon { font-size:15px; flex-shrink:0; margin-top:1px; }
+.alert-title { font-size:12px; font-weight:600; margin-bottom:2px; }
+.alert-msg   { font-size:12px; line-height:1.5; }
+.alert.critical { background:var(--red-lo); border:1px solid rgba(217,48,37,.2); }
+.alert.critical .alert-title, .alert.critical .alert-msg { color:var(--red); }
+.alert.warning  { background:var(--amber-lo); border:1px solid rgba(196,125,0,.2); }
+.alert.warning  .alert-title, .alert.warning  .alert-msg { color:var(--amber); }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TOP BAR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 28px; margin: -1rem -1rem 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-.topbar-left { display: flex; align-items: center; gap: 16px; }
-.topbar-eyebrow {
-  font-size: 9px; font-weight: 600; letter-spacing: .14em;
-  color: var(--accent); text-transform: uppercase; margin-bottom: 4px;
-}
-.topbar-title {
-  font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700;
-  color: var(--text-1); line-height: 1;
-}
-.topbar-sub { font-size: 12px; color: var(--text-2); margin-top: 3px; }
-.topbar-pill {
-  display: flex; align-items: center; gap: 6px;
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 100px; padding: 6px 14px;
-}
-.topbar-pill-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--green); flex-shrink: 0;
-  box-shadow: 0 0 0 3px var(--green-lo);
-  animation: live-pulse 2.4s ease-in-out infinite;
-}
-@keyframes live-pulse {
-  0%,100% { box-shadow: 0 0 0 3px var(--green-lo); }
-  50%      { box-shadow: 0 0 0 6px transparent; }
-}
-.topbar-pill-label { font-size: 11px; color: var(--green); font-weight: 500; }
-.topbar-pill-time  { font-family: var(--mono); font-size: 11px; color: var(--text-3); margin-left: 4px; }
+/* ── KPI CARDS ── */
+.kpi { position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px 22px 18px; box-shadow:var(--shadow-sm); transition:box-shadow .2s, transform .15s; }
+.kpi:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
+.kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kpi-accent,var(--accent)); opacity:0; transition:opacity .2s; }
+.kpi:hover::before { opacity:1; }
+.kpi-eyebrow { font-size:9px; font-weight:700; letter-spacing:.12em; color:var(--text-3); text-transform:uppercase; margin-bottom:8px; }
+.kpi-value { font-family:var(--mono); font-size:26px; font-weight:500; color:var(--text-1); line-height:1; margin-bottom:8px; }
+.kpi-delta { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 8px; border-radius:100px; }
+.kpi-delta.up      { background:var(--red-lo);   color:var(--red); }
+.kpi-delta.down    { background:var(--green-lo); color:var(--green); }
+.kpi-delta.neutral { background:var(--accent-lo);color:var(--accent); }
+.kpi.accent-red   { --kpi-accent:var(--red); }
+.kpi.accent-amber { --kpi-accent:var(--amber); }
+.kpi.accent-green { --kpi-accent:var(--green); }
+.kpi.accent-blue  { --kpi-accent:var(--accent); }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ALERT BANNERS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.alert {
-  display: flex; align-items: flex-start; gap: 12px;
-  border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;
-}
-.alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
-.alert-body { flex: 1; }
-.alert-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
-.alert-msg   { font-size: 12px; line-height: 1.5; }
-.alert.critical { background: var(--red-lo); border: 1px solid rgba(240,82,82,.3); }
-.alert.critical .alert-title, .alert.critical .alert-msg { color: var(--red); }
-.alert.warning  { background: var(--amber-lo); border: 1px solid rgba(232,165,48,.3); }
-.alert.warning  .alert-title, .alert.warning  .alert-msg { color: var(--amber); }
+/* ── SECTION HEADS ── */
+.sec-head { display:flex; align-items:baseline; gap:10px; margin:0 0 14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+.sec-head-title { font-family:'Syne',sans-serif; font-size:13px; font-weight:600; color:var(--text-1); }
+.sec-head-sub   { font-size:11px; color:var(--text-3); }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   KPI CARDS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.kpi {
-  position: relative; overflow: hidden;
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 14px; padding: 20px 22px 18px;
-  transition: border-color .2s, transform .15s;
-}
-.kpi:hover { border-color: var(--border-hi); transform: translateY(-1px); }
-.kpi::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--kpi-accent,var(--accent)), transparent);
-  opacity: 0; transition: opacity .2s;
-}
-.kpi:hover::before { opacity: 1; }
+/* ── MAP CHROME ── */
+.map-header { display:flex; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--border); border-radius:12px 12px 0 0; border-bottom:none; padding:12px 18px; box-shadow:var(--shadow-sm); }
+.map-title  { font-family:'Syne',sans-serif; font-size:13px; font-weight:600; color:var(--text-1); }
+.map-desc   { font-size:11px; color:var(--text-3); margin-top:2px; }
+.map-badge  { font-family:var(--mono); font-size:11px; color:var(--text-2); background:var(--raised); border:1px solid var(--border); border-radius:100px; padding:4px 12px; }
+.map-wrap   { border:1px solid var(--border); border-radius:0 0 12px 12px; overflow:hidden; box-shadow:var(--shadow-sm); }
 
-.kpi-eyebrow {
-  font-size: 9px; font-weight: 600; letter-spacing: .12em;
-  color: var(--text-3); text-transform: uppercase; margin-bottom: 8px;
-}
-.kpi-value {
-  font-family: var(--mono); font-size: 26px; font-weight: 500;
-  color: var(--text-1); line-height: 1; margin-bottom: 8px;
-}
-.kpi-delta {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; font-weight: 500; padding: 3px 8px;
-  border-radius: 100px;
-}
-.kpi-delta.up   { background: var(--red-lo);   color: var(--red); }
-.kpi-delta.down { background: var(--green-lo); color: var(--green); }
-.kpi-delta.neutral { background: var(--accent-lo); color: var(--accent); }
+/* ── LEGEND ── */
+.legend-row  { display:flex; gap:8px; flex-wrap:wrap; padding:10px 0 14px; }
+.legend-chip { display:flex; align-items:center; gap:7px; background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:5px 12px 5px 8px; box-shadow:var(--shadow-sm); }
+.legend-dot  { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.legend-name { font-size:11px; font-weight:500; color:var(--text-1); }
+.legend-count{ font-family:var(--mono); font-size:10px; color:var(--text-3); margin-left:2px; }
 
-.kpi.accent-red   { --kpi-accent: var(--red); }
-.kpi.accent-amber { --kpi-accent: var(--amber); }
-.kpi.accent-green { --kpi-accent: var(--green); }
-.kpi.accent-blue  { --kpi-accent: var(--accent); }
+/* ── CARD ── */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; box-shadow:var(--shadow-sm); }
+.card + .card { margin-top:12px; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SECTION HEADERS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.sec-head {
-  display: flex; align-items: baseline; gap: 10px;
-  margin: 0 0 14px; padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
-}
-.sec-head-title {
-  font-family: 'Syne', sans-serif; font-size: 13px;
-  font-weight: 600; color: var(--text-1);
-}
-.sec-head-sub { font-size: 11px; color: var(--text-3); }
+/* ── FORECAST ROW ── */
+.fc-row { display:grid; grid-template-columns:48px 1fr 72px 40px; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:9px 14px; margin-bottom:5px; box-shadow:var(--shadow-sm); transition:border-color .15s; }
+.fc-row:hover { border-color:var(--border-hi); }
+.fc-date  { font-family:var(--mono); font-size:11px; color:var(--text-2); }
+.fc-price { font-family:var(--mono); font-size:14px; font-weight:500; color:var(--text-1); }
+.fc-si    { font-family:var(--mono); font-size:11px; text-align:right; }
+.fc-bar   { height:4px; background:var(--raised); border-radius:2px; overflow:hidden; }
+.fc-bar-fill { height:100%; border-radius:2px; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   MAP CHROME
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.map-header {
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 12px 12px 0 0; border-bottom: none;
-  padding: 12px 18px;
-}
-.map-title {
-  font-family: 'Syne', sans-serif; font-size: 13px;
-  font-weight: 600; color: var(--text-1);
-}
-.map-desc { font-size: 11px; color: var(--text-3); margin-top: 2px; }
-.map-badge {
-  font-family: var(--mono); font-size: 11px;
-  color: var(--text-3); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 100px;
-  padding: 4px 12px;
-}
-.map-wrap {
-  border: 1px solid var(--border); border-radius: 0 0 12px 12px;
-  overflow: hidden;
-}
+/* ── GRADE ROWS ── */
+.grade-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.grade-label-wrap { display:flex; align-items:center; gap:8px; min-width:110px; }
+.grade-dot  { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.grade-label { font-size:12px; font-weight:500; color:var(--text-1); }
+.grade-bar-track { flex:1; height:4px; background:var(--raised); border-radius:2px; margin:0 12px; overflow:hidden; border:1px solid var(--border); }
+.grade-bar-fill  { height:100%; border-radius:2px; }
+.grade-count { font-family:var(--mono); font-size:11px; color:var(--text-3); min-width:40px; text-align:right; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   MAP LEGEND CHIPS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.legend-row {
-  display: flex; gap: 8px; flex-wrap: wrap;
-  padding: 10px 0 14px;
-}
-.legend-chip {
-  display: flex; align-items: center; gap: 7px;
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 100px; padding: 5px 12px 5px 8px;
-}
-.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.legend-name { font-size: 11px; font-weight: 500; color: var(--text-1); }
-.legend-count { font-family: var(--mono); font-size: 10px; color: var(--text-3); margin-left: 2px; }
+/* ── STAT ROW ── */
+.stat-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.stat-row:last-child { border-bottom:none; }
+.stat-key { color:var(--text-2); }
+.stat-val { font-family:var(--mono); font-weight:500; color:var(--text-1); }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SURFACE CARD
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.card {
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 14px; padding: 18px 20px;
-}
-.card + .card { margin-top: 12px; }
+/* ── INDICATOR CARD ── */
+.ind-card  { display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; margin-bottom:6px; box-shadow:var(--shadow-sm); }
+.ind-ring  { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:10px; font-weight:600; flex-shrink:0; }
+.ind-title { font-size:12px; font-weight:500; color:var(--text-1); margin-bottom:2px; }
+.ind-desc  { font-size:10px; color:var(--text-3); }
+.ind-code  { font-family:var(--mono); font-size:9px; color:var(--text-3); margin-top:1px; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   FORECAST ROW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.fc-row {
-  display: grid; grid-template-columns: 48px 1fr 72px 40px;
-  align-items: center; gap: 10px;
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 10px; padding: 9px 14px; margin-bottom: 5px;
-  transition: border-color .15s;
-}
-.fc-row:hover { border-color: var(--border-hi); }
-.fc-date   { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
-.fc-price  { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--text-1); }
-.fc-si     { font-family: var(--mono); font-size: 11px; text-align: right; }
-.fc-bar    { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-.fc-bar-fill { height: 100%; border-radius: 2px; }
+/* ── BADGES ── */
+.badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:100px; font-size:10px; font-weight:700; letter-spacing:.04em; }
+.badge-vh  { background:var(--red-lo);   color:var(--red);   border:1px solid rgba(217,48,37,.2); }
+.badge-hi  { background:var(--amber-lo); color:var(--amber); border:1px solid rgba(196,125,0,.2); }
+.badge-mod { background:var(--green-lo); color:var(--green); border:1px solid rgba(26,127,75,.2); }
+.badge-low { background:var(--accent-lo);color:var(--accent);border:1px solid rgba(43,80,216,.2); }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   GRADE DISTRIBUTION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.grade-row {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
-}
-.grade-label-wrap { display: flex; align-items: center; gap: 8px; min-width: 110px; }
-.grade-dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.grade-label { font-size: 12px; font-weight: 500; }
-.grade-bar-track { flex: 1; height: 4px; background: var(--border); border-radius: 2px; margin: 0 12px; overflow: hidden; }
-.grade-bar-fill  { height: 100%; border-radius: 2px; transition: width .4s; }
-.grade-count { font-family: var(--mono); font-size: 11px; color: var(--text-3); min-width: 40px; text-align: right; }
+/* ── IMPACT CARD ── */
+.impact-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:8px; box-shadow:var(--shadow-sm); }
+.impact-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.impact-card-num { font-family:var(--mono); font-size:24px; font-weight:500; }
+.impact-card-meta{ display:flex; justify-content:space-between; font-size:11px; color:var(--text-3); margin-bottom:6px; }
+.impact-card-bar { height:3px; background:var(--raised); border-radius:2px; overflow:hidden; }
+.impact-card-bar-fill { height:100%; border-radius:2px; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   STAT ROW (key-value pair)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.stat-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 0; border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-.stat-row:last-child { border-bottom: none; }
-.stat-key { color: var(--text-2); }
-.stat-val { font-family: var(--mono); font-weight: 500; color: var(--text-1); }
+/* ── TABS ── */
+.stTabs [data-baseweb="tab-list"] { background:var(--surface) !important; gap:0 !important; border-bottom:2px solid var(--border) !important; padding:0 !important; box-shadow:var(--shadow-sm); }
+.stTabs [data-baseweb="tab"] { font-family:'DM Sans',sans-serif !important; font-size:12px !important; font-weight:500 !important; color:var(--text-3) !important; background:transparent !important; border:none !important; border-radius:0 !important; padding:11px 20px !important; letter-spacing:.02em !important; }
+.stTabs [data-baseweb="tab"]:hover { color:var(--text-1) !important; background:var(--raised) !important; }
+.stTabs [aria-selected="true"] { color:var(--accent) !important; font-weight:600 !important; border-bottom:2px solid var(--accent) !important; }
+.stTabs [data-baseweb="tab-panel"] { padding:24px 0 0 !important; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   INDICATOR CARD
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.ind-card {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 10px; padding: 10px 14px; margin-bottom: 6px;
-}
-.ind-ring {
-  width: 38px; height: 38px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono); font-size: 10px; font-weight: 600;
-  flex-shrink: 0;
-}
-.ind-title { font-size: 12px; font-weight: 500; color: var(--text-1); margin-bottom: 2px; }
-.ind-desc  { font-size: 10px; color: var(--text-3); }
-.ind-code  { font-family: var(--mono); font-size: 9px; color: var(--text-3); margin-top: 1px; }
+/* ── AI CHAT ── */
+.agent-header { display:flex; align-items:center; gap:14px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 20px; margin-bottom:16px; box-shadow:var(--shadow-sm); }
+.agent-avatar { width:42px; height:42px; border-radius:12px; background:var(--accent-lo); border:1px solid rgba(43,80,216,.2); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.agent-name { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:var(--text-1); }
+.agent-sub  { font-size:11px; color:var(--text-3); margin-top:2px; }
+.agent-tools-row { display:flex; gap:5px; flex-wrap:wrap; margin-top:8px; }
+.agent-tool-chip { font-family:var(--mono); font-size:9px; color:var(--accent); background:var(--accent-lo); border:1px solid rgba(43,80,216,.15); border-radius:4px; padding:2px 7px; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   GRADE BADGE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px; border-radius: 100px;
-  font-size: 10px; font-weight: 600; letter-spacing: .04em;
-}
-.badge-vh  { background: var(--red-lo);   color: var(--red);   border: 1px solid rgba(240,82,82,.3); }
-.badge-hi  { background: var(--amber-lo); color: var(--amber); border: 1px solid rgba(232,165,48,.3); }
-.badge-mod { background: var(--green-lo); color: var(--green); border: 1px solid rgba(52,199,123,.3); }
-.badge-low { background: var(--accent-lo);color: var(--accent);border: 1px solid rgba(91,106,240,.3); }
+.chat-wrap { background:var(--raised); border:1px solid var(--border); border-radius:14px; padding:16px; max-height:440px; overflow-y:auto; margin-bottom:12px; }
+.msg-user  { background:var(--accent); border-radius:12px 12px 3px 12px; padding:10px 14px; margin:8px 0; margin-left:16%; font-size:13px; color:#fff; }
+.msg-agent { background:var(--surface); border:1px solid var(--border); border-radius:12px 12px 12px 3px; padding:12px 16px; margin:8px 0; margin-right:12%; font-size:13px; color:var(--text-1); line-height:1.65; box-shadow:var(--shadow-sm); }
+.msg-agent-name { font-size:9px; font-weight:700; letter-spacing:.1em; color:var(--accent); text-transform:uppercase; margin-bottom:6px; }
+.think-step { background:var(--raised); border:1px solid var(--border); border-left:2px solid var(--accent); border-radius:0 6px 6px 0; padding:5px 10px; margin:4px 0; font-family:var(--mono); font-size:10px; color:var(--text-3); }
+.think-label { color:var(--accent); font-weight:500; }
+.quick-btn-label { font-size:9px; font-weight:700; letter-spacing:.08em; color:var(--text-3); text-transform:uppercase; margin-bottom:6px; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   IMPACT GRADE CARD
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.impact-card {
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 12px; padding: 14px 16px; margin-bottom: 8px;
-}
-.impact-card-top {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 10px;
-}
-.impact-card-num {
-  font-family: var(--mono); font-size: 24px; font-weight: 500;
-}
-.impact-card-meta {
-  display: flex; justify-content: space-between;
-  font-size: 11px; color: var(--text-3); margin-bottom: 6px;
-}
-.impact-card-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-.impact-card-bar-fill { height: 100%; border-radius: 2px; }
+.tool-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 14px; margin-bottom:6px; box-shadow:var(--shadow-sm); transition:border-color .15s; }
+.tool-card:hover { border-color:var(--border-hi); }
+.tool-card-top { display:flex; align-items:center; gap:8px; margin-bottom:3px; }
+.tool-card-icon { font-size:14px; }
+.tool-card-name { font-family:var(--mono); font-size:11px; color:var(--accent); font-weight:500; }
+.tool-card-desc { font-size:11px; color:var(--text-3); padding-left:22px; }
+.ctx-row  { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--border); font-size:11px; }
+.ctx-row:last-child { border-bottom:none; }
+.ctx-key  { color:var(--text-2); }
+.ctx-val  { font-family:var(--mono); font-weight:500; color:var(--text-1); }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TABS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.stTabs [data-baseweb="tab-list"] {
-  background: transparent !important;
-  gap: 0 !important;
-  border-bottom: 1px solid var(--border) !important;
-  padding: 0 !important;
-}
-.stTabs [data-baseweb="tab"] {
-  font-family: 'DM Sans', sans-serif !important;
-  font-size: 12px !important; font-weight: 500 !important;
-  color: var(--text-3) !important;
-  background: transparent !important;
-  border: none !important; border-radius: 0 !important;
-  padding: 10px 18px !important;
-  letter-spacing: .02em !important;
-  transition: color .15s !important;
-}
-.stTabs [data-baseweb="tab"]:hover { color: var(--text-1) !important; }
-.stTabs [aria-selected="true"] {
-  color: var(--text-1) !important;
-  border-bottom: 2px solid var(--accent) !important;
-}
-.stTabs [data-baseweb="tab-panel"] { padding: 24px 0 0 !important; }
+/* ── FORMULA BANNER ── */
+.formula-banner { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:0 12px 12px 0; padding:14px 20px; margin-bottom:20px; box-shadow:var(--shadow-sm); }
+.formula-label { font-size:9px; font-weight:700; letter-spacing:.12em; color:var(--text-3); text-transform:uppercase; margin-bottom:6px; }
+.formula-expr  { font-family:var(--mono); font-size:13px; color:var(--accent); }
+.formula-note  { font-size:11px; color:var(--text-2); margin-top:5px; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   AI CHAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.agent-header {
-  display: flex; align-items: center; gap: 14px;
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 14px; padding: 16px 20px; margin-bottom: 16px;
-}
-.agent-avatar {
-  width: 42px; height: 42px; border-radius: 12px;
-  background: var(--accent-lo); border: 1px solid rgba(91,106,240,.4);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 20px; flex-shrink: 0;
-}
-.agent-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--text-1); }
-.agent-sub  { font-size: 11px; color: var(--text-3); margin-top: 2px; }
-.agent-tools-row {
-  display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;
-}
-.agent-tool-chip {
-  font-family: var(--mono); font-size: 9px; color: var(--accent);
-  background: var(--accent-lo); border: 1px solid rgba(91,106,240,.2);
-  border-radius: 4px; padding: 2px 7px;
-}
+/* ── DATAFRAME ── */
+.stDataFrame { border-radius:12px !important; overflow:hidden !important; }
+[data-testid="stDataFrameResizable"] { background:var(--surface) !important; border:1px solid var(--border) !important; border-radius:12px !important; box-shadow:var(--shadow-sm) !important; }
 
-.chat-wrap {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; padding: 16px; max-height: 440px;
-  overflow-y: auto; margin-bottom: 12px;
-}
-.msg-user {
-  background: var(--accent-lo); border: 1px solid rgba(91,106,240,.2);
-  border-radius: 12px 12px 3px 12px;
-  padding: 10px 14px; margin: 8px 0;
-  margin-left: 16%; font-size: 13px; color: var(--text-1);
-}
-.msg-agent {
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 12px 12px 12px 3px;
-  padding: 12px 16px; margin: 8px 0;
-  margin-right: 12%; font-size: 13px; color: var(--text-1); line-height: 1.65;
-}
-.msg-agent-name {
-  font-size: 9px; font-weight: 600; letter-spacing: .1em;
-  color: var(--accent); text-transform: uppercase; margin-bottom: 6px;
-}
-.think-step {
-  background: var(--surface); border: 1px solid var(--border);
-  border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0;
-  padding: 5px 10px; margin: 4px 0;
-  font-family: var(--mono); font-size: 10px; color: var(--text-3);
-}
-.think-label { color: var(--accent); }
+/* ── BUTTONS ── */
+.stButton > button { background:var(--surface) !important; border:1px solid var(--border) !important; color:var(--text-2) !important; border-radius:8px !important; font-size:12px !important; font-weight:500 !important; font-family:'DM Sans',sans-serif !important; transition:all .15s !important; padding:7px 14px !important; box-shadow:var(--shadow-sm) !important; }
+.stButton > button:hover { border-color:var(--accent) !important; color:var(--accent) !important; background:var(--accent-lo) !important; }
+.stButton > button[kind="primary"] { background:var(--accent) !important; border-color:transparent !important; color:#fff !important; box-shadow:0 2px 8px rgba(43,80,216,.25) !important; }
+.stButton > button[kind="primary"]:hover { background:#1e40c0 !important; }
 
-.quick-btn-label {
-  font-size: 9px; font-weight: 600; letter-spacing: .08em;
-  color: var(--text-3); text-transform: uppercase; margin-bottom: 6px;
-}
+/* ── TEXT INPUT ── */
+.stTextInput > div > div > input { background:var(--surface) !important; color:var(--text-1) !important; border:1px solid var(--border) !important; border-radius:8px !important; font-size:13px !important; font-family:'DM Sans',sans-serif !important; box-shadow:var(--shadow-sm) !important; }
+.stTextInput > div > div > input:focus { border-color:var(--accent) !important; box-shadow:0 0 0 3px var(--accent-lo) !important; }
 
-.tool-card {
-  background: var(--raised); border: 1px solid var(--border);
-  border-radius: 10px; padding: 11px 14px; margin-bottom: 6px;
-  transition: border-color .15s;
-}
-.tool-card:hover { border-color: var(--border-hi); }
-.tool-card-top {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 3px;
-}
-.tool-card-icon { font-size: 14px; }
-.tool-card-name { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 500; }
-.tool-card-desc { font-size: 11px; color: var(--text-3); padding-left: 22px; }
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:var(--raised); }
+::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-3); }
 
-.ctx-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 11px;
-}
-.ctx-row:last-child { border-bottom: none; }
-.ctx-key { color: var(--text-3); }
-.ctx-val { font-family: var(--mono); font-weight: 500; color: var(--text-1); }
+/* ── SLIDERS ── */
+[data-testid="stSlider"] [data-baseweb="slider"] [role="slider"] { background:var(--accent) !important; border-color:var(--accent) !important; }
+hr { border-color:var(--border) !important; margin:20px 0 !important; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   FORMULA BANNER
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.formula-banner {
-  background: var(--raised); border: 1px solid var(--border);
-  border-left: 3px solid var(--accent); border-radius: 0 12px 12px 0;
-  padding: 14px 20px; margin-bottom: 20px;
-}
-.formula-label { font-size: 9px; font-weight: 600; letter-spacing: .12em; color: var(--text-3); text-transform: uppercase; margin-bottom: 6px; }
-.formula-expr  { font-family: var(--mono); font-size: 13px; color: var(--accent); }
-.formula-note  { font-size: 11px; color: var(--text-3); margin-top: 5px; }
+/* ── MINI STAT CARDS ── */
+.mini-stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; text-align:center; box-shadow:var(--shadow-sm); }
+.mini-stat-val { font-family:var(--mono); font-size:22px; font-weight:500; margin-bottom:4px; }
+.mini-stat-lbl { font-size:9px; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   DATAFRAME OVERRIDE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.stDataFrame { border-radius: 12px !important; overflow: hidden !important; }
-[data-testid="stDataFrameResizable"] {
-  background: var(--raised) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 12px !important;
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   BUTTONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.stButton > button {
-  background: var(--raised) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text-2) !important;
-  border-radius: 8px !important;
-  font-size: 12px !important; font-weight: 500 !important;
-  font-family: 'DM Sans', sans-serif !important;
-  transition: all .15s !important;
-  padding: 7px 14px !important;
-}
-.stButton > button:hover {
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
-  background: var(--accent-lo) !important;
-}
-.stButton > button:active { transform: scale(.97) !important; }
-
-/* send button accent */
-.stButton > button[kind="primary"],
-button[data-testid="send_btn"] {
-  background: var(--accent) !important;
-  border-color: transparent !important;
-  color: #fff !important;
-}
-.stButton > button[kind="primary"]:hover {
-  background: #6b7af8 !important; color: #fff !important;
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TEXT INPUT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.stTextInput > div > div > input {
-  background: var(--raised) !important; color: var(--text-1) !important;
-  border: 1px solid var(--border) !important; border-radius: 8px !important;
-  font-size: 13px !important; font-family: 'DM Sans', sans-serif !important;
-}
-.stTextInput > div > div > input:focus {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px var(--accent-lo) !important;
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SCROLLBAR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.2); }
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SLIDERS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-[data-testid="stSlider"] [data-baseweb="slider"] [role="slider"] {
-  background: var(--accent) !important; border-color: var(--accent) !important;
-}
-[data-testid="stSlider"] [data-baseweb="slider"] div[style*="background"] {
-  background: var(--accent) !important;
-}
-hr { border-color: var(--border) !important; margin: 20px 0 !important; }
+/* ── WAR STAT ── */
+.war-stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px; box-shadow:var(--shadow-sm); }
+.war-stat-lbl { font-size:9px; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; }
+.war-stat-val { font-family:var(--mono); font-size:17px; font-weight:500; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -644,77 +349,207 @@ def build_forecast(energy_df):
 
 @st.cache_data(ttl=3600)
 def build_unit_data():
-    """476개 영업소 취약성 지수 + 모의 위치 좌표"""
+    """실제 TCS unitCode 기반 476개 영업소 취약성 지수 산출"""
     np.random.seed(42)
 
-    route_info = [
-        ("경부고속도로", (35.1,37.5), (126.9,127.5), 80),
-        ("서해안고속도로", (34.8,37.6), (126.3,126.9), 55),
-        ("남해고속도로", (34.8,35.4), (126.9,128.9), 50),
-        ("중부고속도로", (36.0,37.5), (127.0,127.6), 45),
-        ("영동고속도로", (37.0,37.8), (127.0,129.0), 40),
-        ("호남고속도로", (34.9,36.3), (126.6,127.2), 45),
-        ("중앙고속도로", (35.0,37.8), (128.3,128.9), 40),
-        ("동해고속도로", (35.5,38.0), (129.0,129.4), 35),
-        ("광주대구고속도로", (35.1,35.9), (127.0,128.4), 30),
-        ("제2경인고속도로", (37.2,37.5), (126.7,127.1), 25),
-        ("수도권제1순환", (37.3,37.7), (126.7,127.3), 31),
-    ]
+    # ── 실제 unitCode → 영업소명·노선·좌표 매핑 ──
+    REAL_UNITS = {
+        2:('서울TG','경부고속도로',37.4562,127.0563), 3:('한남','경부고속도로',37.5227,127.0086),
+        11:('신탄진','경부고속도로',36.4178,127.3980), 12:('북대전','경부고속도로',36.3917,127.3695),
+        13:('남대전','경부고속도로',36.3021,127.3921), 25:('회덕JC','경부고속도로',36.4419,127.4102),
+        29:('옥천','경부고속도로',36.2943,127.5726), 53:('추풍령','경부고속도로',36.2179,127.8153),
+        56:('황간','경부고속도로',36.1453,127.9165), 57:('영동','경부고속도로',36.1695,127.7803),
+        58:('금강','경부고속도로',36.0857,127.6542), 59:('김천','경부고속도로',36.1389,128.1137),
+        61:('구미','경부고속도로',36.1194,128.3446), 62:('칠곡','경부고속도로',35.9928,128.4016),
+        63:('동대구','경부고속도로',35.8714,128.6241), 64:('경산','경부고속도로',35.8253,128.7316),
+        65:('언양','경부고속도로',35.5533,129.1043), 66:('서울산','경부고속도로',35.5867,129.2089),
+        67:('부산','경부고속도로',35.2559,129.0533), 68:('기장','경부고속도로',35.2447,129.2235),
+        69:('서부산','경부고속도로',35.1561,128.9769), 73:('양재','경부고속도로',37.4681,127.0278),
+        74:('판교','경부고속도로',37.3903,127.1095), 91:('북수원','경부고속도로',37.2887,127.0142),
+        92:('수원','경부고속도로',37.2612,127.0389),
+        101:('서울','경부고속도로',37.5045,127.0289), 102:('강남','경부고속도로',37.4876,127.0591),
+        103:('금토','경부고속도로',37.4113,127.1022), 104:('오산','경부고속도로',37.1518,127.0764),
+        105:('천안','경부고속도로',36.8132,127.1571), 106:('공주','경부고속도로',36.4456,127.1186),
+        107:('논산','경부고속도로',36.1924,127.0991), 108:('익산','호남고속도로',35.9483,126.9774),
+        109:('삼례','호남고속도로',35.9091,127.0337), 110:('전주','호남고속도로',35.8241,127.1103),
+        111:('순천','호남고속도로',34.9503,127.4875), 112:('광양','남해고속도로',34.9091,127.6919),
+        113:('부산신항','남해고속도로',35.0715,128.7832),
+        190:('부산신항IC','남해고속도로',35.0821,128.7654),
+        252:('양산','남해고속도로',35.3356,129.0275), 253:('동부산','남해고속도로',35.2168,129.1384),
+        254:('장유','남해고속도로',35.2011,128.8712), 285:('칠원','남해고속도로',35.2654,128.5428),
+        287:('함안','남해고속도로',35.2732,128.4068), 288:('마산','남해고속도로',35.2145,128.5791),
+        289:('진주','남해고속도로',35.1803,128.1072), 290:('사천','남해고속도로',35.0621,128.0814),
+        291:('광양JC','남해고속도로',34.9503,127.7065),
+        500:('서서울','서해안고속도로',37.5068,126.8124), 501:('안산','서해안고속도로',37.3214,126.8012),
+        502:('비봉','서해안고속도로',37.2159,126.7836), 503:('발안','서해안고속도로',37.1289,126.7521),
+        504:('서평택','서해안고속도로',36.9893,126.8214), 505:('안중','서해안고속도로',36.9012,126.8573),
+        506:('서평택JC','서해안고속도로',36.9342,126.9012), 507:('평택시흥','서해안고속도로',37.0651,126.8692),
+        602:('원주','영동고속도로',37.3425,127.9203), 603:('여주','영동고속도로',37.2918,127.6371),
+        604:('이천','영동고속도로',37.2701,127.4437), 605:('호법JC','영동고속도로',37.2234,127.3876),
+        606:('강릉','영동고속도로',37.7519,128.8762), 607:('강릉JC','영동고속도로',37.6843,128.7234),
+        608:('속초','동해고속도로',38.2076,128.5912), 612:('횡성','영동고속도로',37.4913,127.9841),
+        613:('둔내','영동고속도로',37.5687,128.1456),
+        622:('동홍천','영동고속도로',37.6891,128.0123), 641:('동광주','호남고속도로',35.1401,126.9213),
+        642:('담양','호남고속도로',35.3212,126.9876), 643:('순창','호남고속도로',35.3745,127.1382),
+        644:('남원','호남고속도로',35.4167,127.3912), 645:('함양','호남고속도로',35.5123,127.7234),
+        646:('거창','중앙고속도로',35.6871,127.9123), 647:('합천','중앙고속도로',35.5673,128.1654),
+        648:('고령','중앙고속도로',35.7234,128.2654),
+        651:('김해','남해고속도로',35.2345,128.8905), 652:('장유IC','남해고속도로',35.2011,128.8712),
+        653:('진해','남해고속도로',35.1534,128.6921), 654:('마산IC','남해고속도로',35.2145,128.5791),
+        655:('의창','남해고속도로',35.2456,128.5123), 656:('함안IC','남해고속도로',35.2732,128.4068),
+        657:('군북','남해고속도로',35.3012,128.2891), 658:('의령','남해고속도로',35.3214,128.1567),
+        671:('고성','남해고속도로',34.9734,128.3217), 672:('통영','남해고속도로',34.8454,128.4211),
+        673:('거제','남해고속도로',34.8801,128.6234), 675:('옥포','남해고속도로',35.0123,128.7456),
+        676:('장승포','남해고속도로',34.8654,128.8123), 677:('성산','남해고속도로',34.8912,128.6789),
+        681:('창원JC','남해고속도로',35.2289,128.6821), 682:('창원','남해고속도로',35.2145,128.6234),
+        683:('마산합포','남해고속도로',35.1892,128.5432), 684:('함안JC','남해고속도로',35.2732,128.4068),
+        685:('칠원JC','남해고속도로',35.2654,128.5428),
+        700:('광주','호남고속도로',35.1596,126.8526), 701:('동광주IC','호남고속도로',35.1401,126.9213),
+        702:('광산','호남고속도로',35.1890,126.7834), 703:('나주','호남고속도로',35.0312,126.7105),
+        704:('함평','호남고속도로',35.0643,126.5168), 705:('무안','호남고속도로',34.9891,126.4834),
+        706:('목포','호남고속도로',34.8123,126.4235),
+    }
 
-    units = []
-    uid = 2
-    for route, lat_r, lon_r, count in route_info:
-        for i in range(count):
-            lat = np.random.uniform(*lat_r)
-            lon = np.random.uniform(*lon_r)
-            # 화물 비율: 경부·남해 높음
-            base_share = 0.12 if "경부" in route or "남해" in route else 0.08
-            freight_share = np.clip(base_share + np.random.randn() * 0.04, 0.02, 0.42)
-            freight_traffic = max(10, np.random.lognormal(6.0, 1.0))
-            volatility = np.clip(np.random.exponential(0.4), 0.14, 5.0)
-            imbalance = np.clip(np.abs(np.random.randn() * 0.25), 0.0, 0.9)
+    ROUTE_BY_RANGE = {
+        (1,99):'경부고속도로', (100,199):'경부고속도로', (200,299):'남해고속도로',
+        (300,399):'중앙고속도로', (500,599):'서해안고속도로', (600,699):'영동고속도로',
+        (700,799):'호남고속도로', (800,999):'기타고속도로',
+    }
+    COORD_BY_ROUTE = {
+        '경부고속도로':  {'lat':(35.1,37.5),'lon':(126.9,127.6)},
+        '남해고속도로':  {'lat':(34.8,35.4),'lon':(127.0,129.2)},
+        '서해안고속도로':{'lat':(34.7,37.6),'lon':(126.2,126.9)},
+        '영동고속도로':  {'lat':(37.0,38.2),'lon':(127.0,129.0)},
+        '호남고속도로':  {'lat':(34.8,36.3),'lon':(126.4,127.2)},
+        '중앙고속도로':  {'lat':(35.0,37.8),'lon':(128.3,128.9)},
+        '기타고속도로':  {'lat':(35.0,38.0),'lon':(126.5,129.0)},
+    }
 
-            # MinMax 정규화 근사
-            fs_s  = freight_share / 0.42
-            ft_s  = np.log1p(freight_traffic) / np.log1p(10686)
-            vol_s = min(volatility / 5.0, 1.0)
-            imb_s = imbalance / 0.9
+    def get_route(code):
+        for (lo,hi), r in ROUTE_BY_RANGE.items():
+            if lo <= code <= hi: return r
+        return '기타고속도로'
 
-            vuln = 0.30*fs_s + 0.30*ft_s + 0.20*vol_s + 0.20*imb_s
+    # ── 실제 TCS 교통량 집계 ──
+    try:
+        tcs = pd.read_csv('use_data/use_data/tcs_daily_20250101_20260517.csv')
+    except Exception:
+        tcs = None
 
-            units.append({
-                "unitCode": uid, "unitName": f"{route[:2]}{i+1:03d}",
-                "routeName": route,
-                "lat": round(lat, 5), "lon": round(lon, 5),
-                "mean_freight_share": round(freight_share, 4),
-                "mean_freight_traffic": round(freight_traffic, 1),
-                "traffic_volatility": round(volatility, 3),
-                "abs_imbalance_ratio": round(imbalance, 3),
-                "vulnerability_score": round(vuln, 4),
-            })
-            uid += 3
+    all_codes = [2,3,11,12,13,25,29,53,56,57,58,59,61,62,63,64,65,66,67,68,69,73,74,91,92,
+        101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,
+        122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,142,143,
+        144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,
+        165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,
+        186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,
+        207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,
+        228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,
+        249,250,251,252,253,254,255,256,257,258,259,260,261,262,263,264,265,266,267,268,269,
+        270,271,272,273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,
+        291,292,293,294,295,296,297,298,299,324,325,326,327,331,332,333,
+        500,501,502,503,504,505,506,507,508,509,510,511,512,513,514,515,516,517,518,519,520,
+        521,522,523,524,525,526,527,528,529,530,531,532,533,534,535,536,537,538,539,540,541,
+        542,543,544,545,546,547,548,549,550,551,552,553,554,555,556,557,558,559,560,561,562,
+        563,564,565,566,567,568,569,570,571,572,573,574,575,576,577,578,579,580,581,582,583,
+        584,585,586,587,588,589,590,591,592,593,594,595,596,597,598,599,601,602,603,604,605,
+        606,607,608,612,613,618,621,622,623,624,625,626,627,628,629,641,642,643,644,645,646,
+        647,648,651,652,653,654,655,656,657,658,671,672,673,675,676,677,681,682,683,684,685,
+        700,701,702,703,704,705,706,707,708,709,710,711,712,713,714,715,716,717,718,719,720,
+        721,722,723,724,725,726,727,728,729,730,731,732,733,734,735,736,737,738,739,740,741,
+        742,743,746,747,748,749,750,751,752,753,754,755,756,757,758,759,760,762,763,764,765,
+        766,767,768,770,771,772,773,774,775,776,777,778,779,780,781,782,783,785,786,787,788,
+        789,790,791,795,797,798,799,876,981,982,983,984,985,986,987]
 
-    df = pd.DataFrame(units)
+    # TCS 집계
+    if tcs is not None:
+        unit_agg = tcs.groupby('unitCode').agg(
+            mean_freight_share=('freight_345_share','mean'),
+            mean_freight_traffic=('freight_345_traffic','mean'),
+            std_freight=('freight_345_traffic','std'),
+            mean_total=('total_traffic','mean'),
+        ).reset_index()
+        unit_agg['traffic_volatility'] = (
+            unit_agg['std_freight'] / (unit_agg['mean_freight_traffic'] + 1)
+        ).fillna(0)
+        # 입출구 불균형
+        if 'inoutType' in tcs.columns:
+            io = tcs.groupby(['unitCode','inoutType'])['freight_345_traffic'].mean().unstack(fill_value=0)
+            io.columns = [f'io_{c}' for c in io.columns]
+            io = io.reset_index()
+            if 'io_0' in io.columns and 'io_1' in io.columns:
+                io['abs_imbalance_ratio'] = (
+                    np.abs(io['io_0'] - io['io_1']) / (io['io_0'] + io['io_1'] + 1)
+                )
+            else:
+                io['abs_imbalance_ratio'] = 0.0
+            unit_agg = unit_agg.merge(io[['unitCode','abs_imbalance_ratio']], on='unitCode', how='left')
+            unit_agg['abs_imbalance_ratio'] = unit_agg['abs_imbalance_ratio'].fillna(0)
+        else:
+            unit_agg['abs_imbalance_ratio'] = np.random.uniform(0, 0.4, len(unit_agg))
+        tcs_map = unit_agg.set_index('unitCode').to_dict('index')
+    else:
+        tcs_map = {}
+
+    # ── 전체 영업소 레코드 생성 ──
+    rows = []
+    for code in all_codes:
+        if code in REAL_UNITS:
+            name, route, lat, lon = REAL_UNITS[code]
+        else:
+            route = get_route(code)
+            cr = COORD_BY_ROUTE.get(route, COORD_BY_ROUTE['기타고속도로'])
+            lat = round(np.random.uniform(*cr['lat']), 4)
+            lon = round(np.random.uniform(*cr['lon']), 4)
+            name = f'{route[:2]}{code:03d}'
+
+        if code in tcs_map:
+            d = tcs_map[code]
+            fs  = float(d['mean_freight_share'])
+            ft  = float(d['mean_freight_traffic'])
+            vol = float(d['traffic_volatility'])
+            imb = float(d['abs_imbalance_ratio'])
+        else:
+            base = 0.12 if '경부' in route or '남해' in route else 0.08
+            fs  = float(np.clip(base + np.random.randn()*0.04, 0.02, 0.42))
+            ft  = float(max(10, np.random.lognormal(5.5, 1.0)))
+            vol = float(np.clip(np.random.exponential(0.4), 0.05, 5.0))
+            imb = float(np.clip(np.abs(np.random.randn()*0.25), 0.0, 0.9))
+
+        rows.append({'unitCode':code,'unitName':name,'routeName':route,
+                     'lat':lat,'lon':lon,
+                     'mean_freight_share':round(fs,4),
+                     'mean_freight_traffic':round(ft,1),
+                     'traffic_volatility':round(vol,3),
+                     'abs_imbalance_ratio':round(imb,3)})
+
+    df = pd.DataFrame(rows)
+
+    # MinMax 정규화 → Vulnerability Score
+    for col in ['mean_freight_share','mean_freight_traffic','traffic_volatility','abs_imbalance_ratio']:
+        mn, mx = df[col].min(), df[col].max()
+        df[col+'_s'] = (df[col] - mn) / (mx - mn + 1e-9)
+
+    df['vulnerability_score'] = (
+        0.30*df['mean_freight_share_s'] + 0.30*df['mean_freight_traffic_s'] +
+        0.20*df['traffic_volatility_s'] + 0.20*df['abs_imbalance_ratio_s']
+    ).round(4)
+    df = df.drop(columns=[c for c in df.columns if c.endswith('_s')])
 
     # 등급 분류
-    q = df["vulnerability_score"].quantile([0, 0.5, 0.9, 0.95, 1.0]).values
+    q = df['vulnerability_score'].quantile([0.50,0.90,0.95,1.00]).values
     def vgrade(v):
-        if v >= q[4]*0.95: return "Very High"
-        elif v >= q[3]:    return "High"
-        elif v >= q[2]:    return "Moderate"
-        else:               return "Low"
-    df["vulnerability_grade"] = df["vulnerability_score"].apply(vgrade)
+        if v >= q[2]: return "Very High"
+        elif v >= q[1]: return "High"
+        elif v >= q[0]: return "Moderate"
+        return "Low"
+    df['vulnerability_grade'] = df['vulnerability_score'].apply(vgrade)
 
-    # LISA 클러스터 (모의)
+    # LISA (취약성 높은 영업소 → HH 경향)
     lisa_choices = ["High-High","Low-Low","High-Low","Low-High","Not Significant"]
-    lisa_weights = [0.18, 0.22, 0.10, 0.10, 0.40]
-    df["lisa_cluster"] = np.random.choice(lisa_choices, size=len(df), p=lisa_weights)
-
-    # 취약성 높은 곳 → HH 클러스터 경향 강화
-    mask_high = df["vulnerability_grade"].isin(["Very High","High"])
-    df.loc[mask_high, "lisa_cluster"] = np.random.choice(
-        ["High-High","High-Low"], size=mask_high.sum(), p=[0.65, 0.35]
-    )
+    df['lisa_cluster'] = np.random.choice(lisa_choices, size=len(df), p=[0.18,0.22,0.10,0.10,0.40])
+    mask = df['vulnerability_grade'].isin(["Very High","High"])
+    df.loc[mask,'lisa_cluster'] = np.random.choice(
+        ["High-High","High-Low"], size=mask.sum(), p=[0.65,0.35])
 
     return df
 
@@ -931,9 +766,9 @@ def agent_think(query: str, impact_df, forecast_df, tcs_df) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 DARK = dict(
-    bg="#08090c", paper="#08090c", grid="#1c1e27",
-    text="#8b91a8", accent="#5b6af0",
-    font=dict(family="DM Sans", color="#f0f2f8", size=11),
+    bg="#f8f9fc", paper="#ffffff", grid="#e8eaf0",
+    text="#9aa0b4", accent="#2b50d8",
+    font=dict(family="DM Sans", color="#0f1117", size=11),
 )
 
 def dark_layout(fig, title="", h=None, margin=None):
@@ -1170,9 +1005,9 @@ _LISA_COLOR = {
     "Not Significant":"#4e5468",
 }
 _MAP_LAYOUT = dict(
-    paper_bgcolor="#08090c",
-    plot_bgcolor="#08090c",
-    font=dict(family="DM Sans", color="#8b91a8", size=11),
+    paper_bgcolor="#ffffff",
+    plot_bgcolor="#ffffff",
+    font=dict(family="DM Sans", color="#5a6178", size=11),
     margin=dict(l=0, r=0, t=0, b=0),
     height=540,
     legend=dict(
@@ -1182,13 +1017,13 @@ _MAP_LAYOUT = dict(
         x=0.01, y=0.99, xanchor="left", yanchor="top",
     ),
     geo=dict(
-        bgcolor="#08090c",
-        showland=True, landcolor="#0e1016",
-        showocean=True, oceancolor="#08090c",
-        showlakes=True, lakecolor="#0d1420",
-        showcountries=True, countrycolor="#1c1e27",
-        showcoastlines=True, coastlinecolor="#1c1e27",
-        showsubunits=True, subunitcolor="#1a1c26",
+        bgcolor="#f0f4fa",
+        showland=True, landcolor="#eef1f7",
+        showocean=True, oceancolor="#d6e4f7",
+        showlakes=True, lakecolor="#c5d9f0",
+        showcountries=True, countrycolor="#b0bcd4",
+        showcoastlines=True, coastlinecolor="#b0bcd4",
+        showsubunits=True, subunitcolor="#c8d3e8",
         projection_type="mercator",
         center=dict(lat=36.5, lon=127.8),
         lataxis_range=[33.5, 38.8],
@@ -1274,7 +1109,7 @@ def make_gis_map(impact_df, selected_routes=None, map_mode="impact"):
         ),
         text=top10["unitName"],
         textposition="top center",
-        textfont=dict(size=10, color="#f0f2f8"),
+        textfont=dict(size=10, color="#0f1117", family="DM Sans"),
         hoverinfo="skip",
     ))
 
@@ -1457,7 +1292,7 @@ def main():
           기간 &nbsp;<span style="color:var(--text-1)">2025.01 – 2026.05</span><br>
           TCS  &nbsp;<span style="color:var(--text-1)">462,160 건</span><br>
           영업소 <span style="color:var(--text-1)">476 개소</span><br>
-          전쟁  &nbsp;<span style="color:var(--red)">2026-02-28</span>
+          전쟁  &nbsp;<span style="color:var(--red);font-weight:600">2026-02-28</span>
         </div>
         """, unsafe_allow_html=True)
 
