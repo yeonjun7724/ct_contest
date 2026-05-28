@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
-import warnings, time, json, os
+import warnings, time, json, os, base64
 warnings.filterwarnings("ignore")
 
 # ── 페이지 설정 ─────────────────────────────────────────────────────────────
@@ -272,6 +272,44 @@ hr { border-color:var(--border) !important; margin:20px 0 !important; }
 # ═══════════════════════════════════════════════════════════════════════════════
 #  데이터 생성 / 로드 레이어
 # ═══════════════════════════════════════════════════════════════════════════════
+
+@st.cache_data(ttl=3600)
+def load_real_top20():
+    """실제 분석 결과 Top20 CSV 로드"""
+    import os
+    paths = [
+        'top20_unit_impact_score.csv',
+        '/mnt/user-data/outputs/top20_unit_impact_score.csv',
+        '/mnt/user-data/uploads/top20_unit_impact_score.csv',
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            df = pd.read_csv(p)
+            # 컬럼 정리
+            df = df.rename(columns={
+                'xValue': 'lon', 'yValue': 'lat',
+                'fuel_shock_impact_score_mean': 'impact_score_mean',
+                'fuel_shock_impact_score_max':  'impact_score_max',
+                'fuel_shock_impact_grade':      'impact_grade_orig',
+            })
+            df['impact_grade'] = df['impact_grade'].fillna(df['impact_grade_orig'])
+            return df
+    return None
+
+def get_top20_image_b64():
+    """지도 이미지 base64 인코딩"""
+    import os
+    paths = [
+        'top10_unit_impact_score.png',
+        '/mnt/user-data/outputs/top10_unit_impact_score.png',
+        '/mnt/user-data/uploads/top10_unit_impact_score.png',
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            with open(p, 'rb') as f:
+                return base64.b64encode(f.read()).decode()
+    return None
+
 
 @st.cache_data(ttl=3600)
 def load_energy_data():
@@ -1355,11 +1393,30 @@ def main():
     impact_df, geo_df, mean_shock, max_shock = build_impact_score(unit_df, forecast_df)
     tcs_df      = build_tcs_timeseries()
 
+    # ── 실제 분석 결과 Top20 로드 ──────────────────────────────────────────────
+    real_top20  = load_real_top20()
+    map_img_b64 = get_top20_image_b64()
+
+    if real_top20 is not None:
+        real_mean_shock = float(real_top20["mean_diesel_shock_index_30d"].iloc[0])
+        real_max_shock  = float(real_top20["max_diesel_shock_index_30d"].iloc[0])
+        real_vh_count   = int((real_top20["impact_grade"] == "Very High").sum())
+        real_hh_count   = int((real_top20["lisa_cluster"] == "High-High").sum())
+        real_top_score  = float(real_top20["impact_score_mean"].max())
+        real_top_unit   = str(real_top20.loc[real_top20["impact_score_mean"].idxmax(), "unitName"])
+    else:
+        real_mean_shock = mean_shock
+        real_max_shock  = max_shock
+        real_vh_count   = int((impact_df["impact_grade"] == "Very High").sum())
+        real_hh_count   = int((geo_df["lisa_cluster"] == "High-High").sum())
+        real_top_score  = float(impact_df["impact_score_mean"].max())
+        real_top_unit   = ""
+
     last_diesel  = energy_df["diesel_price"].iloc[-1]
     first_diesel = energy_df["diesel_price"].iloc[0]
     diesel_delta = (last_diesel / first_diesel - 1) * 100
-    vh_count     = (impact_df["impact_grade"] == "Very High").sum()
-    hh_count     = (geo_df["lisa_cluster"] == "High-High").sum()
+    vh_count     = real_vh_count
+    hh_count     = real_hh_count
 
     # ── SIDEBAR ───────────────────────────────────────────────────────────────
     with st.sidebar:
@@ -1465,10 +1522,10 @@ def main():
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     kpi_data = [
         (k1, "현재 경유가", f"{last_diesel:,.0f}원", f"{diesel_delta:+.1f}%", "up" if diesel_delta>0 else "down", "accent-red"),
-        (k2, "30일 예측 최고가", f"{forecast_df['ensemble'].max():,.0f}원", f"+{forecast_df['change_rate'].max():.1f}%", "up", "accent-red"),
-        (k3, "Shock Index (avg)", f"{mean_shock:.3f}", "HIGH" if mean_shock>0.6 else "MEDIUM", "up" if mean_shock>0.5 else "neutral", "accent-amber"),
-        (k4, "Very High 영업소", f"{vh_count}", f"{vh_count/len(impact_df)*100:.1f}%", "up", "accent-red"),
-        (k5, "HH 클러스터", f"{hh_count}", "LISA p<0.05", "neutral", "accent-blue"),
+        (k2, "Impact Score 최고", f"{real_top_score:.4f}", f"{real_top_unit}", "up", "accent-red"),
+        (k3, "Shock Index (avg)", f"{real_mean_shock:.3f}", "HIGH" if real_mean_shock>0.6 else "MEDIUM", "up" if real_mean_shock>0.5 else "neutral", "accent-amber"),
+        (k4, "Very High 영업소", f"{real_vh_count}개소", f"Top: {real_top_unit}", "up", "accent-red"),
+        (k5, "HH 클러스터", f"{real_hh_count}개소", "High-High LISA", "neutral", "accent-blue"),
         (k6, "WTI 현재가", f"${energy_df['wti'].iloc[-1]:.1f}", f"Brent ${energy_df['brent'].iloc[-1]:.1f}", "neutral", "accent-blue"),
     ]
     for col, label, val, delta, dir_, accent in kpi_data:
@@ -1563,34 +1620,77 @@ def main():
         # Below-map: table + chart
         tc1, tc2 = st.columns([3, 2])
         with tc1:
-            st.markdown('<div class="sec-head"><span class="sec-head-title">상위 20 취약 영업소</span><span class="sec-head-sub">Impact Score 내림차순</span></div>', unsafe_allow_html=True)
-            filtered = impact_df
-            if grade_filter:
-                filtered = filtered[filtered["impact_grade"].isin(grade_filter)]
-            filtered = filtered[
-                (filtered["impact_score_mean"] >= score_range[0]) &
-                (filtered["impact_score_mean"] <= score_range[1])
-            ]
-            top20 = filtered.nlargest(20, "impact_score_mean")[[
-                "unitName","routeName","impact_grade","impact_score_mean",
-                "vulnerability_score","lisa_cluster","mean_freight_share"
-            ]].copy()
-            top20["mean_freight_share"] = (top20["mean_freight_share"]*100).round(1).astype(str)+"%"
-            top20["impact_score_mean"]  = top20["impact_score_mean"].round(4)
-            top20["vulnerability_score"]= top20["vulnerability_score"].round(4)
-            top20.columns = ["영업소","노선","등급","충격점수","취약성","LISA","화물비율"]
-            GRADE_CSS = {
-                "Very High":"background-color:#1a0a0a;color:#f05252",
-                "High":"background-color:#1a1200;color:#e8a530",
-                "Moderate":"background-color:#041510;color:#34c77b",
-                "Low":"background-color:#0a0d20;color:#5b6af0",
-            }
-            styled = top20.style.map(lambda v: GRADE_CSS.get(v,""), subset=["등급"])
-            st.dataframe(styled, use_container_width=True, height=440)
+            # ── 실제 Top20 데이터 우선 사용 ──
+            if real_top20 is not None:
+                st.markdown('<div class="sec-head"><span class="sec-head-title">상위 20 취약 영업소</span><span class="sec-head-sub">실제 분석 결과 · Impact Score 내림차순</span></div>', unsafe_allow_html=True)
+                disp = real_top20[[
+                    "unitName","routeName","impact_grade","impact_score_mean",
+                    "vulnerability_score","lisa_cluster","mean_freight_345_share",
+                    "mean_freight_345_traffic","traffic_volatility"
+                ]].copy()
+                disp["mean_freight_345_share"]   = (disp["mean_freight_345_share"]*100).round(1).astype(str)+"%"
+                disp["impact_score_mean"]         = disp["impact_score_mean"].round(4)
+                disp["vulnerability_score"]       = disp["vulnerability_score"].round(4)
+                disp["mean_freight_345_traffic"]  = disp["mean_freight_345_traffic"].round(0).astype(int)
+                disp["traffic_volatility"]        = disp["traffic_volatility"].round(2)
+                disp.columns = ["영업소","노선","충격등급","충격점수","취약성점수","LISA클러스터","화물비율","화물교통량","변동성"]
+                GRADE_CSS = {
+                    "Very High":"background-color:#fff0ee;color:#d93025;font-weight:600",
+                    "High":"background-color:#fffbf0;color:#c47d00;font-weight:600",
+                    "Moderate":"background-color:#f0fff6;color:#1a7f4b;font-weight:600",
+                    "Low":"background-color:#f0f4ff;color:#2b50d8;font-weight:600",
+                }
+                LISA_CSS = {
+                    "High-High":"background-color:#fff0ee;color:#d93025",
+                    "Low-Low":"background-color:#f0f4ff;color:#2b50d8",
+                    "High-Low":"background-color:#fffbf0;color:#c47d00",
+                    "Low-High":"background-color:#f0f8ff;color:#0077c8",
+                }
+                styled = (disp.style
+                    .map(lambda v: GRADE_CSS.get(v,""), subset=["충격등급"])
+                    .map(lambda v: LISA_CSS.get(v,""), subset=["LISA클러스터"])
+                )
+                st.dataframe(styled, use_container_width=True, height=540)
+            else:
+                st.markdown('<div class="sec-head"><span class="sec-head-title">상위 20 취약 영업소</span><span class="sec-head-sub">Impact Score 내림차순</span></div>', unsafe_allow_html=True)
+                filtered = impact_df
+                if grade_filter:
+                    filtered = filtered[filtered["impact_grade"].isin(grade_filter)]
+                filtered = filtered[
+                    (filtered["impact_score_mean"] >= score_range[0]) &
+                    (filtered["impact_score_mean"] <= score_range[1])
+                ]
+                top20 = filtered.nlargest(20, "impact_score_mean")[[
+                    "unitName","routeName","impact_grade","impact_score_mean",
+                    "vulnerability_score","lisa_cluster","mean_freight_share"
+                ]].copy()
+                top20["mean_freight_share"] = (top20["mean_freight_share"]*100).round(1).astype(str)+"%"
+                top20["impact_score_mean"]  = top20["impact_score_mean"].round(4)
+                top20["vulnerability_score"]= top20["vulnerability_score"].round(4)
+                top20.columns = ["영업소","노선","등급","충격점수","취약성","LISA","화물비율"]
+                GRADE_CSS = {
+                    "Very High":"background-color:#fff0ee;color:#d93025;font-weight:600",
+                    "High":"background-color:#fffbf0;color:#c47d00;font-weight:600",
+                    "Moderate":"background-color:#f0fff6;color:#1a7f4b;font-weight:600",
+                    "Low":"background-color:#f0f4ff;color:#2b50d8;font-weight:600",
+                }
+                styled = top20.style.map(lambda v: GRADE_CSS.get(v,""), subset=["등급"])
+                st.dataframe(styled, use_container_width=True, height=440)
 
         with tc2:
-            st.markdown('<div class="sec-head"><span class="sec-head-title">노선별 평균 Impact Score</span></div>', unsafe_allow_html=True)
-            st.plotly_chart(chart_route_impact(impact_df), use_container_width=True)
+            # ── 실제 지도 이미지 표출 ──
+            if map_img_b64:
+                st.markdown('<div class="sec-head"><span class="sec-head-title">Regional Fuel Shock Impact Score</span><span class="sec-head-sub">실제 분석 결과 지도</span></div>', unsafe_allow_html=True)
+                st.markdown(f'''
+                <div style="background:var(--surface);border:1px solid var(--border);
+                             border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm);padding:8px">
+                  <img src="data:image/png;base64,{map_img_b64}"
+                       style="width:100%;border-radius:8px;display:block" />
+                </div>
+                ''', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="sec-head"><span class="sec-head-title">노선별 평균 Impact Score</span></div>', unsafe_allow_html=True)
+                st.plotly_chart(chart_route_impact(impact_df), use_container_width=True)
 
     # ════════════════════════════════════════════════════════
     # TAB 2 · ENERGY
