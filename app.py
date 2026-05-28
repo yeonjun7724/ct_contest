@@ -284,9 +284,12 @@ AGENT_TOOLS = {
 }
 
 def _find_file(*names):
-    """출력 디렉토리에서 파일 탐색"""
+    """실데이터 파일 탐색 (스크립트 폴더 · ./ · ./output 우선)"""
     import os
-    dirs = ['.', '/mnt/user-data/outputs', '/mnt/user-data/uploads']
+    _here = os.path.dirname(os.path.abspath(__file__))
+    dirs = [_here, os.path.join(_here, 'output'),
+            '.', './output',
+            '/mnt/user-data/outputs', '/mnt/user-data/uploads']
     for d in dirs:
         for name in names:
             p = os.path.join(d, name)
@@ -403,508 +406,7 @@ def get_top20_image_b64():
             return base64.b64encode(f.read()).decode()
     return None
 
-
-@st.cache_data(ttl=3600)
-def load_energy_data():
-    """
-    실제 수치 기반 에너지 시계열
-    보고서 표3 수치: WTI 55.27~112.95, Brent 58.92~118.35,
-    USD/KRW 1352.74~1517.65, VIX 13.47~52.33,
-    경유가 1489.89~2004.23원/L
-    """
-    np.random.seed(42)
-    dates = pd.date_range("2025-02-01", "2026-05-01", freq="D")
-    n = len(dates)
-    _war_ts  = pd.Timestamp("2026-02-28")
-    war_idx  = np.array([1.0 if d >= _war_ts else 0.0 for d in dates])
-    war_days = np.array([float((d - _war_ts).days) if d >= _war_ts else 0.0 for d in dates])
-
-    # WTI: 실제 min 55.27 / max 112.95 / avg 67.79
-    pre_n  = int((dates < _war_ts).sum())
-    post_n = n - pre_n
-    wti_pre  = np.linspace(55.27, 68.0, pre_n) + np.random.randn(pre_n) * 3.5
-    wti_post = np.linspace(68.0, 112.95, post_n) + np.random.randn(post_n) * 4.2
-    wti = np.concatenate([wti_pre, wti_post])
-    wti = np.clip(wti, 55.27, 112.95)
-
-    # Brent: 실제 min 58.92 / max 118.35
-    brent = wti + np.random.randn(n) * 1.5 + 4.2
-    brent_pre  = brent[:pre_n]
-    brent_post = np.linspace(brent[pre_n], 118.35, post_n) + np.random.randn(post_n) * 3.8
-    brent = np.concatenate([brent_pre, brent_post])
-    brent = np.clip(brent, 58.92, 118.35)
-
-    # USD/KRW: 실제 min 1352.74 / max 1517.65 / avg 1432.2
-    usdkrw_pre  = np.linspace(1390, 1420, pre_n) + np.random.randn(pre_n) * 18
-    usdkrw_post = np.linspace(1420, 1517.65, post_n) + np.random.randn(post_n) * 15
-    usdkrw = np.concatenate([usdkrw_pre, usdkrw_post])
-    usdkrw = np.clip(usdkrw, 1352.74, 1517.65)
-
-    # VIX: 실제 min 13.47 / max 52.33 / avg 19.42
-    vix_pre  = np.clip(np.random.randn(pre_n) * 3.2 + 16.5, 13.47, 26.0)
-    vix_spike = np.zeros(post_n)
-    vix_spike[:10] = np.linspace(17, 52.33, 10)  # 전쟁 직후 급등
-    vix_spike[10:]  = np.exp(-np.arange(post_n-10)/25) * 28 + 14
-    vix = np.concatenate([vix_pre, vix_spike])
-    vix = np.clip(vix, 13.47, 52.33)
-
-    # 경유가: 실제 min 1489.89 / max 2004.23 / avg 1605.4
-    diesel_pre  = np.linspace(1489.89, 1620, pre_n) + np.random.randn(pre_n) * 12
-    diesel_post = np.linspace(1620, 2004.23, post_n) + np.random.randn(post_n) * 10
-    diesel = np.concatenate([diesel_pre, diesel_post])
-    diesel = np.clip(diesel, 1489.89, 2004.23)
-
-    # 휘발유가: 실제 min 1626.99 / max 2010.03 / avg 1712.0
-    gasoline = diesel + np.random.randn(n) * 8 + 105
-    gasoline = np.clip(gasoline, 1626.99, 2010.03)
-
-    df = pd.DataFrame({
-        "date":         dates,
-        "wti":          np.round(wti, 2),
-        "brent":        np.round(brent, 2),
-        "usd_krw":      np.round(usdkrw, 1),
-        "vix":          np.round(vix, 2),
-        "diesel_price": np.round(diesel, 1),
-        "gasoline_price": np.round(gasoline, 1),
-        "war_period":   np.where(dates < _war_ts, "전쟁 이전", "전쟁 이후"),
-    })
-    return df
-
-
-
-@st.cache_data(ttl=3600)
-def build_forecast(energy_df):
-    """30일 경유가 앙상블 예측 (Prophet 40% + LSTM 60% 모의)"""
-    last_price = energy_df["diesel_price"].iloc[-1]
-    last_date  = energy_df["date"].iloc[-1]
-    future_dates = pd.date_range(last_date + timedelta(1), periods=30, freq="D")
-    np.random.seed(7)
-
-    trend = np.linspace(0, 35, 30)
-    prophet_pred = last_price + trend + np.random.randn(30) * 8
-    lstm_pred    = last_price + trend * 1.15 + np.random.randn(30) * 6
-    ensemble     = 0.4 * prophet_pred + 0.6 * lstm_pred
-
-    change_rate = (ensemble / last_price - 1) * 100
-    r_min, r_max = change_rate.min(), change_rate.max()
-    shock_index  = (change_rate - r_min) / (r_max - r_min + 1e-8)
-
-    def grade(x):
-        if x < 0.3:   return "LOW"
-        elif x < 0.6: return "MEDIUM"
-        elif x < 0.8: return "HIGH"
-        else:          return "CRITICAL"
-
-    return pd.DataFrame({
-        "date": future_dates,
-        "prophet": np.round(prophet_pred, 1),
-        "lstm": np.round(lstm_pred, 1),
-        "ensemble": np.round(ensemble, 1),
-        "change_rate": np.round(change_rate, 2),
-        "shock_index": np.round(shock_index, 4),
-        "risk_level": [grade(x) for x in shock_index],
-        "lower": np.round(ensemble - 45, 1),
-        "upper": np.round(ensemble + 55, 1),
-    })
-
-
-@st.cache_data(ttl=3600)
-def build_unit_data():
-    """
-    취약성 산출 : TCS 476개 전체 unitCode
-    공간분석 대상: 좌표 확보된 영업소만 (has_coord=True)
-    """
-    np.random.seed(42)
-
-    # ── 실제 API 좌표 취득 영업소 (374개 기준) ──
-    # unitCode → (영업소명, 노선명, lat, lon)
-    COORDS = {
-        2:('서울TG','경부고속도로',37.4562,127.0563),
-        3:('한남','경부고속도로',37.5227,127.0086),
-        11:('신탄진','경부고속도로',36.4178,127.3980),
-        12:('북대전','경부고속도로',36.3917,127.3695),
-        13:('남대전','경부고속도로',36.3021,127.3921),
-        25:('회덕JC','경부고속도로',36.4419,127.4102),
-        29:('옥천','경부고속도로',36.2943,127.5726),
-        53:('추풍령','경부고속도로',36.2179,127.8153),
-        56:('황간','경부고속도로',36.1453,127.9165),
-        57:('영동','경부고속도로',36.1695,127.7803),
-        58:('금강','경부고속도로',36.0857,127.6542),
-        59:('김천','경부고속도로',36.1389,128.1137),
-        61:('구미','경부고속도로',36.1194,128.3446),
-        62:('칠곡','경부고속도로',35.9928,128.4016),
-        63:('동대구','경부고속도로',35.8714,128.6241),
-        64:('경산','경부고속도로',35.8253,128.7316),
-        65:('언양','경부고속도로',35.5533,129.1043),
-        66:('서울산','경부고속도로',35.5867,129.2089),
-        67:('부산','경부고속도로',35.2559,129.0533),
-        68:('기장','경부고속도로',35.2447,129.2235),
-        69:('서부산','경부고속도로',35.1561,128.9769),
-        73:('양재','경부고속도로',37.4681,127.0278),
-        74:('판교','경부고속도로',37.3903,127.1095),
-        91:('북수원','경부고속도로',37.2887,127.0142),
-        92:('수원','경부고속도로',37.2612,127.0389),
-        101:('서울IC','경부고속도로',37.5045,127.0289),
-        102:('강남','경부고속도로',37.4876,127.0591),
-        103:('금토','경부고속도로',37.4113,127.1022),
-        104:('오산','경부고속도로',37.1518,127.0764),
-        105:('천안','경부고속도로',36.8132,127.1571),
-        106:('공주','경부고속도로',36.4456,127.1186),
-        107:('논산','경부고속도로',36.1924,127.0991),
-        108:('익산','호남고속도로',35.9483,126.9774),
-        109:('삼례','호남고속도로',35.9091,127.0337),
-        110:('전주','호남고속도로',35.8241,127.1103),
-        111:('순천','호남고속도로',34.9503,127.4875),
-        112:('광양','남해고속도로',34.9091,127.6919),
-        113:('부산신항','남해고속도로',35.0715,128.7832),
-        114:('녹산','남해고속도로',35.1021,128.7234),
-        115:('가락','남해고속도로',35.1345,128.6512),
-        116:('가야','남해고속도로',35.1678,128.5821),
-        190:('부산신항IC','남해고속도로',35.0821,128.7654),
-        200:('동순천','호남고속도로',34.9812,127.5234),
-        201:('순천만','호남고속도로',34.9678,127.4123),
-        202:('여수','호남고속도로',34.7534,127.6012),
-        210:('광양항','남해고속도로',34.8467,127.7124),
-        220:('하동','남해고속도로',35.0667,127.7790),
-        221:('진교','남해고속도로',34.9877,127.8568),
-        246:('냉정JC','남해고속도로',35.2456,128.6234),
-        252:('양산','남해고속도로',35.3356,129.0275),
-        253:('동부산','남해고속도로',35.2168,129.1384),
-        254:('장유','남해고속도로',35.2011,128.8712),
-        285:('칠원','남해고속도로',35.2654,128.5428),
-        287:('함안','남해고속도로',35.2732,128.4068),
-        288:('마산','남해고속도로',35.2145,128.5791),
-        289:('진주','남해고속도로',35.1803,128.1072),
-        290:('사천','남해고속도로',35.0621,128.0814),
-        291:('광양JC','남해고속도로',34.9503,127.7065),
-        324:('서창','제2순환도로',35.1234,128.9012),
-        325:('엄궁','제2순환도로',35.1456,128.9789),
-        326:('화명','제2순환도로',35.2234,128.9567),
-        327:('덕천','제2순환도로',35.2012,128.9345),
-        331:('반여','제2순환도로',35.1789,129.1123),
-        332:('재송','제2순환도로',35.1567,129.0901),
-        333:('석대','제2순환도로',35.1345,129.0679),
-        500:('서서울','서해안고속도로',37.5068,126.8124),
-        501:('안산','서해안고속도로',37.3214,126.8012),
-        502:('비봉','서해안고속도로',37.2159,126.7836),
-        503:('발안','서해안고속도로',37.1289,126.7521),
-        504:('서평택','서해안고속도로',36.9893,126.8214),
-        505:('안중','서해안고속도로',36.9012,126.8573),
-        506:('서평택JC','서해안고속도로',36.9342,126.9012),
-        507:('평택시흥','서해안고속도로',37.0651,126.8692),
-        508:('당진','서해안고속도로',36.8923,126.6234),
-        509:('서해대교','서해안고속도로',36.9734,126.6789),
-        510:('홍성','서해안고속도로',36.6012,126.6601),
-        511:('광천','서해안고속도로',36.5123,126.6234),
-        512:('대천','서해안고속도로',36.3234,126.5456),
-        513:('춘장대','서해안고속도로',36.1345,126.4678),
-        514:('군산','서해안고속도로',35.9456,126.7901),
-        515:('동군산','서해안고속도로',35.9901,126.8234),
-        516:('김제','서해안고속도로',35.8012,126.9012),
-        517:('고창','서해안고속도로',35.4345,126.7456),
-        518:('선운산','서해안고속도로',35.3901,126.6901),
-        519:('법성포','서해안고속도로',35.3123,126.6123),
-        520:('함평','서해안고속도로',35.0678,126.5678),
-        521:('무안','서해안고속도로',34.9901,126.4901),
-        522:('목포','서해안고속도로',34.8123,126.4235),
-        596:('서천공주','서해안고속도로',36.2234,126.9345),
-        601:('신갈JC','영동고속도로',37.2901,127.1123),
-        602:('원주','영동고속도로',37.3425,127.9203),
-        603:('여주','영동고속도로',37.2918,127.6371),
-        604:('이천','영동고속도로',37.2701,127.4437),
-        605:('호법JC','영동고속도로',37.2234,127.3876),
-        606:('강릉','영동고속도로',37.7519,128.8762),
-        607:('강릉JC','영동고속도로',37.6843,128.7234),
-        608:('속초','동해고속도로',38.2076,128.5912),
-        612:('횡성','영동고속도로',37.4913,127.9841),
-        613:('둔내','영동고속도로',37.5687,128.1456),
-        618:('진부','영동고속도로',37.6234,128.5678),
-        621:('강동','동해고속도로',37.7901,128.9123),
-        622:('동홍천','영동고속도로',37.6891,128.0123),
-        623:('홍천','영동고속도로',37.6234,127.8901),
-        624:('서홍천','영동고속도로',37.5577,127.7690),
-        625:('양평','영동고속도로',37.4920,127.6479),
-        626:('양평JC','영동고속도로',37.4263,127.5268),
-        627:('여주JC','영동고속도로',37.3606,127.4057),
-        641:('동광주','호남고속도로',35.1401,126.9213),
-        642:('담양','호남고속도로',35.3212,126.9876),
-        643:('순창','호남고속도로',35.3745,127.1382),
-        644:('남원','호남고속도로',35.4167,127.3912),
-        645:('함양','호남고속도로',35.5123,127.7234),
-        646:('거창','중앙고속도로',35.6871,127.9123),
-        647:('합천','중앙고속도로',35.5673,128.1654),
-        648:('고령','중앙고속도로',35.7234,128.2654),
-        651:('김해','남해고속도로',35.2345,128.8905),
-        652:('장유IC','남해고속도로',35.2011,128.8712),
-        653:('진해','남해고속도로',35.1534,128.6921),
-        654:('마산IC','남해고속도로',35.2145,128.5791),
-        655:('의창','남해고속도로',35.2456,128.5123),
-        656:('함안IC','남해고속도로',35.2732,128.4068),
-        657:('군북','남해고속도로',35.3012,128.2891),
-        658:('의령','남해고속도로',35.3214,128.1567),
-        671:('고성','남해고속도로',34.9734,128.3217),
-        672:('통영','남해고속도로',34.8454,128.4211),
-        673:('거제','남해고속도로',34.8801,128.6234),
-        675:('옥포','남해고속도로',35.0123,128.7456),
-        676:('장승포','남해고속도로',34.8654,128.8123),
-        677:('성산','남해고속도로',34.8912,128.6789),
-        681:('창원JC','남해고속도로',35.2289,128.6821),
-        682:('창원','남해고속도로',35.2145,128.6234),
-        683:('마산합포','남해고속도로',35.1892,128.5432),
-        684:('함안JC','남해고속도로',35.2732,128.4068),
-        685:('칠원JC','남해고속도로',35.2654,128.5428),
-        700:('광주','호남고속도로',35.1596,126.8526),
-        701:('동광주IC','호남고속도로',35.1401,126.9213),
-        702:('광산','호남고속도로',35.1890,126.7834),
-        703:('나주','호남고속도로',35.0312,126.7105),
-        704:('함평','호남고속도로',35.0643,126.5168),
-        705:('무안','호남고속도로',34.9891,126.4834),
-        706:('목포','호남고속도로',34.8123,126.4235),
-        707:('남광주','호남고속도로',35.1234,126.9345),
-        708:('화순','호남고속도로',35.0678,126.9901),
-        709:('능주','호남고속도로',34.9901,126.9234),
-        710:('보성','호남고속도로',34.7712,127.0789),
-        711:('득량','호남고속도로',34.6789,127.1567),
-        712:('장성','호남고속도로',35.2789,126.7901),
-        713:('백양사','호남고속도로',35.4123,126.8456),
-        714:('정읍','호남고속도로',35.5456,126.8901),
-        715:('태인','호남고속도로',35.6567,126.9234),
-        716:('김제JC','호남고속도로',35.8012,126.9456),
-        717:('서전주','호남고속도로',35.8345,127.0789),
-        718:('완주JC','호남고속도로',35.9123,127.1234),
-        780:('죽전','용인-서울고속도로',37.3234,127.1012),
-        781:('서판교','용인-서울고속도로',37.3901,127.0789),
-        782:('양재IC','용인-서울고속도로',37.4678,127.0567),
-        876:('인천공항','인천국제공항고속도로',37.4567,126.4901),
-        981:('선산','중부내륙고속도로',36.1234,128.3456),
-        982:('구미JC','중부내륙고속도로',36.1901,128.3901),
-        983:('김천JC','중부내륙고속도로',36.1234,128.1789),
-        984:('추풍령JC','중부내륙고속도로',36.2234,127.8901),
-        985:('영동JC','중부내륙고속도로',36.1901,127.7789),
-        986:('옥천JC','중부내륙고속도로',36.2901,127.5901),
-        987:('청원JC','중부내륙고속도로',36.6234,127.4234),
-    }
-
-    ROUTE_BY_RANGE = {
-        (1,99):'경부고속도로', (100,199):'경부고속도로',
-        (200,299):'남해고속도로', (300,399):'부산순환고속도로',
-        (500,599):'서해안고속도로', (600,699):'영동고속도로',
-        (700,799):'호남고속도로', (800,999):'기타고속도로',
-    }
-
-    def get_route(code):
-        for (lo, hi), r in ROUTE_BY_RANGE.items():
-            if lo <= code <= hi:
-                return r
-        return '기타고속도로'
-
-    # ── 실제 TCS 집계 ──
-    try:
-        tcs = pd.read_csv('use_data/use_data/tcs_daily_20250101_20260517.csv')
-    except Exception:
-        tcs = None
-
-    ALL_CODES = [
-        2,3,11,12,13,25,29,53,56,57,58,59,61,62,63,64,65,66,67,68,69,73,74,91,92,
-        101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,
-        120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,
-        139,140,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,
-        159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,
-        178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,
-        197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,
-        216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,
-        235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,
-        254,255,256,257,258,259,260,261,262,263,264,265,266,267,268,269,270,271,272,
-        273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,
-        292,293,294,295,296,297,298,299,324,325,326,327,331,332,333,
-        500,501,502,503,504,505,506,507,508,509,510,511,512,513,514,515,516,517,518,
-        519,520,521,522,523,524,525,526,527,528,529,530,531,532,533,534,535,536,537,
-        538,539,540,541,542,543,544,545,546,547,548,549,550,551,552,553,554,555,556,
-        557,558,559,560,561,562,563,564,565,566,567,568,569,570,571,572,573,574,575,
-        576,577,578,579,580,581,582,583,584,585,586,587,588,589,590,591,592,593,594,
-        595,596,597,598,599,601,602,603,604,605,606,607,608,612,613,618,621,622,623,
-        624,625,626,627,628,629,641,642,643,644,645,646,647,648,651,652,653,654,655,
-        656,657,658,671,672,673,675,676,677,681,682,683,684,685,700,701,702,703,704,
-        705,706,707,708,709,710,711,712,713,714,715,716,717,718,719,720,721,722,723,
-        724,725,726,727,728,729,730,731,732,733,734,735,736,737,738,739,740,741,742,
-        743,746,747,748,749,750,751,752,753,754,755,756,757,758,759,760,762,763,764,
-        765,766,767,768,770,771,772,773,774,775,776,777,778,779,780,781,782,783,785,
-        786,787,788,789,790,791,795,797,798,799,876,981,982,983,984,985,986,987,
-    ]
-
-    if tcs is not None:
-        agg = tcs.groupby('unitCode').agg(
-            mean_freight_share=('freight_345_share','mean'),
-            mean_freight_traffic=('freight_345_traffic','mean'),
-            std_freight=('freight_345_traffic','std'),
-        ).reset_index()
-        agg['traffic_volatility'] = (
-            agg['std_freight'] / (agg['mean_freight_traffic'] + 1)
-        ).fillna(0)
-        io = tcs.groupby(['unitCode','inoutType'])['freight_345_traffic'].mean().unstack(fill_value=0)
-        io.columns = [f'io_{c}' for c in io.columns]
-        io = io.reset_index()
-        io['abs_imbalance_ratio'] = (
-            np.abs(io.get('io_0', 0) - io.get('io_1', 0)) /
-            (io.get('io_0', 0) + io.get('io_1', 0) + 1)
-        )
-        agg = agg.merge(io[['unitCode','abs_imbalance_ratio']], on='unitCode', how='left')
-        agg['abs_imbalance_ratio'] = agg['abs_imbalance_ratio'].fillna(0)
-        tcs_map = agg.set_index('unitCode').to_dict('index')
-    else:
-        tcs_map = {}
-
-    rows = []
-    for code in ALL_CODES:
-        # 영업소명·노선
-        if code in COORDS:
-            name, route, lat, lon = COORDS[code]
-            has_coord = True
-        else:
-            route = get_route(code)
-            lat, lon = None, None
-            has_coord = False
-            name = f'{route[:2]}{code:03d}'
-
-        # 교통량 지표 (실측 or 모의)
-        if code in tcs_map:
-            d = tcs_map[code]
-            fs  = float(d['mean_freight_share'])
-            ft  = float(d['mean_freight_traffic'])
-            vol = float(d['traffic_volatility'])
-            imb = float(d['abs_imbalance_ratio'])
-        else:
-            base = 0.12 if '경부' in route or '남해' in route else 0.08
-            fs  = float(np.clip(base + np.random.randn()*0.04, 0.02, 0.42))
-            ft  = float(max(10, np.random.lognormal(5.5,1.0)))
-            vol = float(np.clip(np.random.exponential(0.4), 0.05, 5.0))
-            imb = float(np.clip(np.abs(np.random.randn()*0.25), 0.0, 0.9))
-
-        rows.append({
-            'unitCode': code, 'unitName': name, 'routeName': route,
-            'lat': lat, 'lon': lon, 'has_coord': has_coord,
-            'mean_freight_share': round(fs,4),
-            'mean_freight_traffic': round(ft,1),
-            'traffic_volatility': round(vol,3),
-            'abs_imbalance_ratio': round(imb,3),
-        })
-
-    df = pd.DataFrame(rows)
-
-    # MinMax 정규화 → Vulnerability Score (476개 전체 기준)
-    for col in ['mean_freight_share','mean_freight_traffic',
-                'traffic_volatility','abs_imbalance_ratio']:
-        mn, mx = df[col].min(), df[col].max()
-        df[col+'_s'] = (df[col] - mn) / (mx - mn + 1e-9)
-
-    df['vulnerability_score'] = (
-        0.30*df['mean_freight_share_s'] +
-        0.30*df['mean_freight_traffic_s'] +
-        0.20*df['traffic_volatility_s'] +
-        0.20*df['abs_imbalance_ratio_s']
-    ).round(4)
-    df = df.drop(columns=[c for c in df.columns if c.endswith('_s')])
-
-    # 등급 (전체 476개 기준)
-    q = df['vulnerability_score'].quantile([0.50,0.90,0.95]).values
-    def vgrade(v):
-        if v >= q[2]: return "Very High"
-        elif v >= q[1]: return "High"
-        elif v >= q[0]: return "Moderate"
-        return "Low"
-    df['vulnerability_grade'] = df['vulnerability_score'].apply(vgrade)
-
-    # LISA·공간분석 — 좌표 있는 영업소만
-    lisa_choices = ["High-High","Low-Low","High-Low","Low-High","Not Significant"]
-    df['lisa_cluster'] = "해당없음(좌표없음)"  # 기본값
-
-    coord_mask = df['has_coord']
-    df.loc[coord_mask, 'lisa_cluster'] = np.random.choice(
-        lisa_choices, size=coord_mask.sum(), p=[0.18,0.22,0.10,0.10,0.40]
-    )
-    # 취약성 높은 좌표 보유 영업소 → HH 경향
-    high_coord = df['has_coord'] & df['vulnerability_grade'].isin(["Very High","High"])
-    df.loc[high_coord, 'lisa_cluster'] = np.random.choice(
-        ["High-High","High-Low"], size=high_coord.sum(), p=[0.65,0.35]
-    )
-
-    return df
-
-@st.cache_data(ttl=3600)
-def build_impact_score(unit_df, forecast_df):
-    """
-    Fuel Shock Impact Score 통합 산출
-    - full_df : 476개 전체 (테이블·통계용)
-    - geo_df  : 좌표 있는 영업소만 (지도·LISA 시각화용)
-    """
-    mean_shock = forecast_df["shock_index"].mean()
-    max_shock  = forecast_df["shock_index"].max()
-
-    df = unit_df.copy()
-    df["mean_diesel_shock"] = round(mean_shock, 4)
-    df["max_diesel_shock"]  = round(max_shock, 4)
-    df["impact_score_mean"] = (df["vulnerability_score"] * mean_shock).round(4)
-    df["impact_score_max"]  = (df["vulnerability_score"] * max_shock).round(4)
-
-    # 등급은 전체 476개 분포 기준
-    q_vals = df["impact_score_mean"].quantile([0.50, 0.90, 0.95]).values
-    def igrade(v):
-        if v >= q_vals[2]:   return "Very High"
-        elif v >= q_vals[1]: return "High"
-        elif v >= q_vals[0]: return "Moderate"
-        else:                return "Low"
-    df["impact_grade"] = df["impact_score_mean"].apply(igrade)
-
-    # 지도·공간분석용: 좌표 있는 영업소만
-    geo_df = df[df["has_coord"] == True].copy()
-
-    return df, geo_df, mean_shock, max_shock
-
-
-@st.cache_data(ttl=3600)
-def build_tcs_timeseries():
-    """
-    실제 수치 기반 TCS 일별 화물 교통량 시계열
-    보고서 표9: 전쟁 이전 819.4대/일 → 이후 837.3대/일
-    화물 비율: 9.57% → 9.79%
-    """
-    np.random.seed(1)
-    dates = pd.date_range("2025-01-01", "2026-05-17", freq="D")
-    n = len(dates)
-    _war_ts = pd.Timestamp("2026-02-28")
-    pre_n  = int((dates < _war_ts).sum())
-    post_n = n - pre_n
-
-    weekday_factor = np.array([1.15, 1.18, 1.20, 1.18, 1.12, 0.62, 0.45])
-    wf = np.array([weekday_factor[d.weekday()] for d in dates])
-
-    # 전쟁 이전: 영업소별 평균 819.4대/일 × 476개소 × 2(입출구)
-    # 전국 일별 총합 기준으로 역산
-    pre_daily_total  = 819.4 * 476 * 2 * 1.012   # 오차 보정
-    post_daily_total = 837.3 * 476 * 2 * 1.022   # 오차 보정
-
-    freight_pre  = wf[:pre_n]  * pre_daily_total  + np.random.randn(pre_n)  * 38000
-    freight_post = wf[post_n:] if post_n == 0 else wf[pre_n:] * post_daily_total + np.random.randn(post_n) * 41000
-    freight = np.concatenate([freight_pre, freight_post])
-    freight = np.clip(freight, 80000, 1800000).astype(int)
-
-    # 화물 비율: 전쟁 이전 9.57%, 이후 9.79%
-    share_pre  = np.clip(np.random.randn(pre_n)  * 0.008 + 0.0957, 0.07, 0.14)
-    share_post = np.clip(np.random.randn(post_n) * 0.008 + 0.0979, 0.07, 0.14)
-    share = np.concatenate([share_pre, share_post])
-
-    total = (freight / share).astype(int)
-    total = np.clip(total, 500000, 12000000)
-
-    return pd.DataFrame({
-        "date":            dates,
-        "freight_traffic": freight,
-        "total_traffic":   total,
-        "freight_share":   np.round(share, 4),
-        "war_period":      np.where(dates < _war_ts, "전쟁 이전", "전쟁 이후"),
-    })
-
-
+# (모의 데이터 생성 함수 제거됨 — 실데이터 CSV만 사용)
 
 # ── 차트 공통 테마 / 레이아웃 헬퍼 ───────────────────────────────────────────
 DARK = {
@@ -1378,6 +880,141 @@ def make_arc_map2d(impact_df):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  LogisAI 에이전트 — 규칙 기반 라우터 (실데이터 전용 · ReAct 표기)
+#  ※ 모든 응답 수치는 로드된 실제 데이터프레임에서 직접 산출됩니다 (모의 없음).
+# ═══════════════════════════════════════════════════════════════════════════════
+def _classify_intent(q: str) -> str:
+    """사용자 질문 → 6개 도구 중 하나로 분류"""
+    q = q.lower()
+    rules = [
+        ("forecast_diesel",    ["예측", "경유", "디젤", "forecast", "전망", "30일", "가격"]),
+        ("rank_vulnerability", ["취약", "랭킹", "순위", "상위", "위험 영업소", "영업소", "top", "노선별 위험"]),
+        ("lisa_cluster",       ["lisa", "클러스터", "공간", "자기상관", "hh", "군집", "moran"]),
+        ("war_comparison",     ["전쟁", "전후", "before", "after", "비교(전쟁)", "교통량 변화"]),
+        ("shock_index",        ["shock", "충격", "지수", "리스크", "위험도", "등급"]),
+        ("scenario_compare",   ["시나리오", "scenario", "비교", "what if", "가정"]),
+    ]
+    scores = {k: sum(1 for kw in kws if kw in q) for k, kws in rules}
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "forecast_diesel"
+
+
+def agent_think(query, impact_df, forecast_df, tcs_df):
+    """
+    규칙 기반 분석 에이전트. 실데이터프레임만 조회하여 실수치로 응답.
+    반환: [(라벨, 텍스트, None), ...]  — 마지막 튜플이 최종 응답.
+    """
+    tool = _classify_intent(query)
+    tool_label = AGENT_TOOLS.get(tool, tool)
+
+    steps = [
+        ("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None),
+        ("🧠 추론(Think)",   f"적합 도구 선택 → `{tool}` ({tool_label})", None),
+    ]
+
+    # ── forecast_diesel ──────────────────────────────────────────────
+    if tool == "forecast_diesel":
+        f0 = float(forecast_df["ensemble"].iloc[0])
+        f1 = float(forecast_df["ensemble"].iloc[-1])
+        chg = (f1 / f0 - 1) * 100
+        peak = float(forecast_df["ensemble"].max())
+        peak_date = str(forecast_df.loc[forecast_df["ensemble"].idxmax(), "date"])[:10]
+        crit = int((forecast_df["risk_level"] == "CRITICAL").sum())
+        high = int((forecast_df["risk_level"] == "HIGH").sum())
+        steps.append(("⚡ 실행(Act)", "Prophet+LSTM 앙상블 예측 30일 조회", None))
+        ans = (
+            f"**경유가 30일 예측 (Prophet+LSTM 앙상블)**\n\n"
+            f"· 예측 시작가 **{f0:,.0f}원** → 종료가 **{f1:,.0f}원** ({chg:+.2f}%)\n"
+            f"· 최고 예측가 **{peak:,.0f}원** ({peak_date})\n"
+            f"· 위험구간: CRITICAL **{crit}일**, HIGH **{high}일** / 총 {len(forecast_df)}일\n"
+            f"· Shock Index 평균 **{forecast_df['shock_index'].mean():.3f}** (최대 {forecast_df['shock_index'].max():.3f})"
+        )
+
+    # ── rank_vulnerability ───────────────────────────────────────────
+    elif tool == "rank_vulnerability":
+        top = impact_df.sort_values("impact_score_mean", ascending=False).head(5)
+        steps.append(("⚡ 실행(Act)", "영업소 Impact Score 내림차순 정렬 → 상위 5개", None))
+        rows = "\n".join(
+            f"{i+1}. **{r['unitName']}** ({r['routeName']}) — "
+            f"Impact {r['impact_score_mean']:.3f} · {r['impact_grade']}"
+            for i, (_, r) in enumerate(top.iterrows())
+        )
+        vh = int((impact_df["impact_grade"] == "Very High").sum())
+        ans = (
+            f"**취약성·충격 상위 영업소 (실데이터 {len(impact_df)}개소 기준)**\n\n"
+            f"{rows}\n\n"
+            f"· Very High 등급: 전체 **{vh}개소**"
+        )
+
+    # ── lisa_cluster ─────────────────────────────────────────────────
+    elif tool == "lisa_cluster":
+        vc = impact_df["lisa_cluster"].value_counts()
+        steps.append(("⚡ 실행(Act)", "LISA 공간 자기상관 클러스터 집계", None))
+        order = ["High-High", "Low-Low", "High-Low", "Low-High", "Not significant"]
+        rows = "\n".join(
+            f"· {c}: **{int(vc.get(c,0))}개소**" for c in order if c in vc.index
+        )
+        hh = int(vc.get("High-High", 0))
+        ans = (
+            f"**LISA 공간 자기상관 클러스터 (Local Moran's I)**\n\n"
+            f"{rows}\n\n"
+            f"High-High **{hh}개소** — 취약 영업소가 공간적으로 군집된 핫스팟입니다."
+        )
+
+    # ── war_comparison ───────────────────────────────────────────────
+    elif tool == "war_comparison":
+        g = tcs_df.groupby("war_period")["freight_traffic"].mean()
+        before = float(g.get("전쟁 이전", float("nan")))
+        after  = float(g.get("전쟁 이후", float("nan")))
+        steps.append(("⚡ 실행(Act)", "전쟁 전후 일평균 화물 교통량 비교", None))
+        if before and after:
+            d = (after / before - 1) * 100
+            ans = (
+                f"**전쟁 전후 화물 교통량 비교 (TCS 실측)**\n\n"
+                f"· 전쟁 이전 일평균 화물 **{before:,.0f}대**\n"
+                f"· 전쟁 이후 일평균 화물 **{after:,.0f}대** ({d:+.1f}%)\n\n"
+                f"유가 충격 이후 화물 통행이 {'감소' if d<0 else '증가'}하는 패턴이 관측됩니다."
+            )
+        else:
+            ans = "전쟁 전후 비교에 필요한 교통량 구간 데이터가 부족합니다."
+
+    # ── shock_index ──────────────────────────────────────────────────
+    elif tool == "shock_index":
+        m = float(forecast_df["shock_index"].mean())
+        mx = float(forecast_df["shock_index"].max())
+        steps.append(("⚡ 실행(Act)", "Diesel Shock Index 산출·등급 분포 집계", None))
+        vc = forecast_df["risk_level"].value_counts()
+        rows = "\n".join(
+            f"· {lv}: **{int(vc.get(lv,0))}일**"
+            for lv in ["CRITICAL", "HIGH", "MEDIUM", "LOW"] if lv in vc.index
+        )
+        ans = (
+            f"**Diesel Shock Index (실데이터 예측 기반)**\n\n"
+            f"· 평균 **{m:.3f}** / 최대 **{mx:.3f}**\n\n"
+            f"{rows}"
+        )
+
+    # ── scenario_compare ─────────────────────────────────────────────
+    else:  # scenario_compare
+        base = float(forecast_df["ensemble"].iloc[0])
+        worst = float(forecast_df["ensemble"].max())
+        worst_shock = float(forecast_df["shock_index"].max())
+        vh = int((impact_df["impact_grade"] == "Very High").sum())
+        hi = int((impact_df["impact_grade"] == "High").sum())
+        steps.append(("⚡ 실행(Act)", "기준 시나리오 vs 최대충격 시나리오 영향 비교", None))
+        ans = (
+            f"**유가 시나리오별 충격 영향 비교**\n\n"
+            f"· 기준 시나리오: 경유가 **{base:,.0f}원**, Shock 낮음\n"
+            f"· 최대충격 시나리오: 경유가 **{worst:,.0f}원**, Shock Index **{worst_shock:.2f}**\n\n"
+            f"최대충격 시 고위험(Very High {vh} + High {hi} = **{vh+hi}개소**) 영업소의 "
+            f"물류비 부담이 가장 크게 가중됩니다."
+        )
+
+    steps.append(("💬 최종 응답", ans, None))
+    return steps
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  메인 UI
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1391,20 +1028,23 @@ def main():
     route_impact_df = load_route_impact()     # 노선별 Impact Score
     map_img_b64     = get_top20_image_b64()   # 지도 이미지
 
-    # ── 모의 데이터 fallback (파일 없을 때) ───────────────────────────────────
-    energy_df = model_a_input if model_a_input is not None else load_energy_data()
-    if forecast_df is None:
-        _unit = build_unit_data()
-        _e    = load_energy_data()
-        _fc   = build_forecast(_e)
-        _imp, geo_df, _ms, _mx = build_impact_score(_unit, _fc)
-        forecast_df = _fc
-        tcs_df      = build_tcs_timeseries() if tcs_df is None else tcs_df
-    if geo_df is None:
-        _unit = build_unit_data()
-        _e    = load_energy_data()
-        _fc   = build_forecast(_e)
-        _, geo_df, _, _ = build_impact_score(_unit, _fc)
+    # ── 실데이터 필수 검증 (없으면 중단 · 모의 데이터 생성 안 함) ──────────────
+    _required = {
+        "model_A_inputdata.csv":          model_a_input,
+        "model_A_result_final.csv(+ensemble)": forecast_df,
+        "pre_post_war_traffic_volumne.csv": tcs_df,
+        "impact_score_grade_unit.csv":    geo_df,
+        "top20_unit_impact_score.csv":    real_top20,
+    }
+    _missing = [k for k, v in _required.items() if v is None]
+    if _missing:
+        st.error(
+            "필수 실데이터 파일을 찾을 수 없습니다:\n\n- "
+            + "\n- ".join(_missing)
+            + "\n\napp.py 와 같은 폴더(또는 ./output)에 해당 CSV를 배치한 뒤 다시 실행하세요."
+        )
+        st.stop()
+    energy_df = model_a_input
 
     # ── 핵심 수치 계산 ────────────────────────────────────────────────────────
     # 경유가 (실제 입력 기준)
@@ -2067,9 +1707,9 @@ def main():
 
         with ag2:
             st.markdown('<div class="sec-head"><span class="sec-head-title">사용 가능 도구</span></div>', unsafe_allow_html=True)
-            TICONS = {"경유가_예측_조회":"📈","취약성_랭킹_조회":"🏆",
-                      "노선별_위험_분석":"🛣️","LISA_클러스터_조회":"🗺️",
-                      "시나리오_비교":"⚖️","전쟁전후_비교":"⚔️"}
+            TICONS = {"forecast_diesel":"📈","rank_vulnerability":"🏆",
+                      "lisa_cluster":"🗺️","war_comparison":"⚔️",
+                      "shock_index":"⚡","scenario_compare":"⚖️"}
             for name, desc in AGENT_TOOLS.items():
                 icon = TICONS.get(name,"🔧")
                 st.markdown(f"""
