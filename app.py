@@ -273,6 +273,16 @@ hr { border-color:var(--border) !important; margin:20px 0 !important; }
 #  데이터 생성 / 로드 레이어
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# AI 에이전트 툴 정의 (ReAct 패턴 · 6 Tools)
+AGENT_TOOLS = {
+    "forecast_diesel":   "경유가 30일 예측 (Prophet+LSTM 앙상블)",
+    "rank_vulnerability":"영업소 취약성 랭킹 조회",
+    "lisa_cluster":      "LISA 공간 자기상관 클러스터 분석",
+    "war_comparison":    "전쟁 전후 교통량·화물 비중 비교",
+    "shock_index":       "Diesel Shock Index 산출·등급화",
+    "scenario_compare":  "유가 시나리오별 충격 영향 비교",
+}
+
 def _find_file(*names):
     """출력 디렉토리에서 파일 탐색"""
     import os
@@ -347,7 +357,9 @@ def load_geo_units():
         df = df.rename(columns={'xValue':'lon','yValue':'lat',
                                  'fuel_shock_impact_score_mean':'impact_score_mean',
                                  'fuel_shock_impact_score_max':'impact_score_max',
-                                 'fuel_shock_impact_grade':'impact_grade_orig'})
+                                 'fuel_shock_impact_grade':'impact_grade_orig',
+                                 'mean_freight_345_share':'mean_freight_share',
+                                 'mean_freight_345_traffic':'mean_freight_traffic'})
         if 'impact_grade' not in df.columns:
             df['impact_grade'] = df['impact_grade_orig']
         df['has_coord'] = True
@@ -363,7 +375,9 @@ def load_real_top20():
         df = df.rename(columns={'xValue':'lon','yValue':'lat',
                                  'fuel_shock_impact_score_mean':'impact_score_mean',
                                  'fuel_shock_impact_score_max':'impact_score_max',
-                                 'fuel_shock_impact_grade':'impact_grade_orig'})
+                                 'fuel_shock_impact_grade':'impact_grade_orig',
+                                 'mean_freight_345_share':'mean_freight_share',
+                                 'mean_freight_345_traffic':'mean_freight_traffic'})
         if 'impact_grade' not in df.columns:
             df['impact_grade'] = df['impact_grade_orig']
         return df
@@ -892,6 +906,34 @@ def build_tcs_timeseries():
 
 
 
+# ── 차트 공통 테마 / 레이아웃 헬퍼 ───────────────────────────────────────────
+DARK = {
+    "bg":    "rgba(0,0,0,0)",          # 투명 (라이트 테마 카드 위)
+    "paper": "rgba(0,0,0,0)",
+    "grid":  "rgba(0,0,0,.08)",
+    "text":  "#5a6178",
+    "font":  dict(family="DM Sans, sans-serif", size=11, color="#5a6178"),
+}
+
+def dark_layout(fig, title=None, h=300):
+    """Plotly figure에 공통 테마 적용"""
+    fig.update_layout(
+        plot_bgcolor=DARK["bg"], paper_bgcolor=DARK["paper"],
+        font=DARK["font"], height=h,
+        margin=dict(l=20, r=20, t=40 if title else 20, b=20),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10, color=DARK["text"]),
+                    orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    if title:
+        fig.update_layout(title=dict(text=title, font=dict(size=13, color="#0f1117",
+                          family="Syne, sans-serif"), x=0, xanchor="left"))
+    fig.update_xaxes(gridcolor=DARK["grid"], linecolor=DARK["grid"],
+                     zerolinecolor=DARK["grid"], tickfont=dict(size=10, color=DARK["text"]))
+    fig.update_yaxes(gridcolor=DARK["grid"], linecolor=DARK["grid"],
+                     zerolinecolor=DARK["grid"], tickfont=dict(size=10, color=DARK["text"]))
+    return fig
+
+
 def chart_energy_timeline(energy_df):
     fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
         row_heights=[0.4, 0.3, 0.3], vertical_spacing=0.04,
@@ -1373,6 +1415,9 @@ def main():
     # Shock Index (실제 예측 결과)
     real_mean_shock = float(forecast_df["shock_index"].mean())
     real_max_shock  = float(forecast_df["shock_index"].max())
+    # main() 스코프 공용 alias (본문 곳곳에서 mean_shock/max_shock 참조)
+    mean_shock = real_mean_shock
+    max_shock  = real_max_shock
 
     # 영업소 통계 (실제 374개 기준)
     if geo_df is not None and "impact_grade" in geo_df.columns:
@@ -1389,6 +1434,8 @@ def main():
 
     # impact_df = geo_df (374개)로 통일 (테이블/차트용)
     impact_df = geo_df.copy() if geo_df is not None else pd.DataFrame()
+    # 물류 취약성 탭에서 쓰는 영업소 단위 데이터 (geo_df와 동일 소스)
+    unit_df = impact_df
 
     vh_count = real_vh_count
     hh_count = real_hh_count
@@ -1600,13 +1647,13 @@ def main():
                 st.markdown('<div class="sec-head"><span class="sec-head-title">상위 20 취약 영업소</span><span class="sec-head-sub">실제 분석 결과 · Impact Score 내림차순</span></div>', unsafe_allow_html=True)
                 disp = real_top20[[
                     "unitName","routeName","impact_grade","impact_score_mean",
-                    "vulnerability_score","lisa_cluster","mean_freight_345_share",
-                    "mean_freight_345_traffic","traffic_volatility"
+                    "vulnerability_score","lisa_cluster","mean_freight_share",
+                    "mean_freight_traffic","traffic_volatility"
                 ]].copy()
-                disp["mean_freight_345_share"]   = (disp["mean_freight_345_share"]*100).round(1).astype(str)+"%"
+                disp["mean_freight_share"]   = (disp["mean_freight_share"]*100).round(1).astype(str)+"%"
                 disp["impact_score_mean"]         = disp["impact_score_mean"].round(4)
                 disp["vulnerability_score"]       = disp["vulnerability_score"].round(4)
-                disp["mean_freight_345_traffic"]  = disp["mean_freight_345_traffic"].round(0).astype(int)
+                disp["mean_freight_traffic"]  = disp["mean_freight_traffic"].round(0).astype(int)
                 disp["traffic_volatility"]        = disp["traffic_volatility"].round(2)
                 disp.columns = ["영업소","노선","충격등급","충격점수","취약성점수","LISA클러스터","화물비율","화물교통량","변동성"]
                 GRADE_CSS = {
@@ -1766,8 +1813,8 @@ def main():
 
             st.markdown('<div class="sec-head" style="margin-top:8px"><span class="sec-head-title">구성 지표</span></div>', unsafe_allow_html=True)
             IND = [
-                ("mean_freight_345_share",   "화물 비율",  "30%", "#f05252", "화물 의존 구조"),
-                ("mean_freight_345_traffic", "화물 교통량","30%", "#e8a530", "규모 노출도"),
+                ("mean_freight_share",   "화물 비율",  "30%", "#f05252", "화물 의존 구조"),
+                ("mean_freight_traffic", "화물 교통량","30%", "#e8a530", "규모 노출도"),
                 ("traffic_volatility",       "교통 변동성","20%", "#34c77b", "충격 흡수 능력"),
                 ("abs_imbalance_ratio",      "흐름 불균형","20%", "#5b6af0", "구조적 비효율"),
             ]
