@@ -1653,7 +1653,6 @@ def main():
       <div class="topbar-pill">
         <div class="topbar-pill-dot"></div>
         <span class="topbar-pill-label">LIVE</span>
-        <span class="topbar-pill-time">{datetime.now().strftime('%H:%M')} KST</span>
       </div>
     </div>
     """, unsafe_allow_html=True)
