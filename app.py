@@ -902,7 +902,7 @@ def _classify_intent(q: str) -> str:
     ]
     scores = {k: sum(1 for kw in kws if kw in q) for k, kws in rules}
     best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else "forecast_diesel"
+    return best if scores[best] > 0 else "unknown"
 
 
 _OOS_KEYWORDS = [
@@ -948,8 +948,22 @@ def agent_think(query, impact_df, forecast_df, tcs_df):
                 ("💬 최종 응답", _OOS_REPLY, None)]
 
     tool = _classify_intent(query)
-    tool_label = AGENT_TOOLS.get(tool, tool)
 
+    # 키워드 미매칭 → 이해 불가 응답
+    if tool == "unknown":
+        return [
+            ("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None),
+            ("💬 최종 응답",
+             "질문을 이해하지 못했습니다. 아래 주제로 질문해 보세요:\n\n"
+             "- **경유가 예측**: 30일 앙상블 예측 결과\n"
+             "- **취약 영업소**: 취약성·충격 상위 영업소\n"
+             "- **노선별 분석**: 특정 노선 위험도 (예: 경부선)\n"
+             "- **LISA 클러스터**: 공간 자기상관 핫스팟\n"
+             "- **시나리오 비교**: 기본 vs 최악 시나리오\n"
+             "- **전쟁 전후**: 화물 교통량 변화", None),
+        ]
+
+    tool_label = AGENT_TOOLS.get(tool, tool)
     steps = [
         ("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None),
         ("🧠 추론(Think)",   f"적합 도구 선택 → `{tool}` ({tool_label})", None),
