@@ -18,6 +18,12 @@ try:
 except ImportError:
     _OPENAI_AVAILABLE = False
 
+try:
+    from duckduckgo_search import DDGS
+    _DDG_AVAILABLE = True
+except ImportError:
+    _DDG_AVAILABLE = False
+
 # ── 페이지 설정 ─────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="고속도로 물류 취약성 분석 시스템",
@@ -287,6 +293,7 @@ AGENT_TOOLS = {
     "LISA_클러스터_조회":"High-High 공간 클러스터 영업소 목록·통계 반환",
     "시나리오_비교":     "기본·최악 시나리오의 Very High 영업소 수 차이 비교",
     "전쟁전후_비교":     "전쟁 전후 화물 교통량 변화율 및 주요 변화 영업소 조회",
+    "web_검색":          "유가·물류·경제 관련 최신 웹 정보 검색",
 }
 
 def _find_file(*names):
@@ -1151,6 +1158,27 @@ _LLM_TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_검색",
+            "description": (
+                "인터넷에서 최신 정보를 검색합니다. "
+                "유가 상승 원인, 전쟁 영향, 물류 정책, 경제 동향 등 "
+                "분석 데이터에 없는 배경 지식이나 외부 맥락이 필요할 때 사용하세요."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "검색할 키워드 (예: '경유가 상승 원인 2026', '러시아 전쟁 유가 영향')",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 _SYSTEM_PROMPT = """당신은 고속도로 물류 취약성·유류충격 분석 전문 AI 에이전트 'LogisAI'입니다.
@@ -1308,6 +1336,24 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
                 f"물류비 부담 증가로 {'운행 억제' if d < 0 else '물량 증가'} 현상 추정"
             )
         return "전쟁 전후 비교 데이터가 부족합니다."
+
+    elif name == "web_검색":
+        query_str = tool_input.get("query", "")
+        if not query_str:
+            return "검색어를 입력해 주세요."
+        if not _DDG_AVAILABLE:
+            return "웹 검색 기능을 사용할 수 없습니다 (duckduckgo_search 미설치)."
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query_str, max_results=4))
+            if not results:
+                return f"'{query_str}' 검색 결과가 없습니다."
+            return "\n\n".join(
+                f"[{r['title']}]\n{r['body']}"
+                for r in results
+            )
+        except Exception as e:
+            return f"검색 중 오류 발생: {str(e)}"
 
     return f"'{name}' 도구 실행 결과 없음"
 
@@ -2164,7 +2210,7 @@ def main():
             st.markdown('<div class="sec-head"><span class="sec-head-title">사용 가능 도구</span></div>', unsafe_allow_html=True)
             TICONS = {"경유가_예측_조회":"📈","취약성_랭킹_조회":"🏆",
                       "노선별_위험_분석":"🛣️","LISA_클러스터_조회":"🗺️",
-                      "시나리오_비교":"⚖️","전쟁전후_비교":"⚔️"}
+                      "시나리오_비교":"⚖️","전쟁전후_비교":"⚔️","web_검색":"🌐"}
             for name, desc in AGENT_TOOLS.items():
                 icon = TICONS.get(name,"🔧")
                 st.markdown(f"""
