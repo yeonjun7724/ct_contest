@@ -1091,15 +1091,38 @@ _LLM_TOOLS = [
 
 _SYSTEM_PROMPT = """당신은 고속도로 물류 취약성·유류충격 분석 전문 AI 에이전트 'LogisAI'입니다.
 
-분석 데이터 맥락:
-- 분석 대상: 전국 고속도로 영업소 374개소 (좌표 확보)
-- 분석 기간: 2025.01 – 2026.05 (TCS 실측 데이터)
-- 전쟁 발발: 2026-02-28 (러-우 확전 → 유가 급등 시나리오)
-- 핵심 모델: Model A (Prophet+LSTM 앙상블 경유가 30일 예측) + Model B (Vulnerability Score)
-- 핵심 지표: Fuel Shock Impact Score = Vulnerability Score × Diesel Shock Index
+## 분석 데이터 맥락
+- 분석 대상: 전국 고속도로 영업소 374개소 (TCS 실측 데이터, 2025.01–2026.05)
+- 전쟁 발발: 2026-02-28 (러-우 확전 → 국제 유가 급등 시나리오)
+- Model A: Prophet+LSTM 앙상블 경유가 30일 예측 + Diesel Shock Index
+- Model B: Vulnerability Score (화물비율 30% + 교통량 30% + 변동성 20% + 불균형 20%)
+- 핵심 공식: Fuel Shock Impact Score = Vulnerability Score × Diesel Shock Index
 
-도구를 반드시 호출하여 실제 데이터를 조회한 뒤, 수치와 정책적 시사점을 포함한 한국어 브리핑으로 답변하세요.
-응답은 핵심 수치 → 해석 → 정책 시사점 순서로 구성하세요."""
+## 답변 원칙
+
+### 1. 도구 사용
+- 질문이 분석 데이터와 관련된 경우, 반드시 도구를 먼저 호출하여 실제 수치를 조회한 뒤 답변하세요.
+- 여러 도구를 함께 활용해야 더 풍부한 답변이 가능하면, 복수 도구를 순차 호출하세요.
+
+### 2. 범위 밖 질문 처리
+- 분석 데이터·모델·고속도로 물류·유류충격과 무관한 질문(예: 날씨, 주식, 일반 상식 등)에는
+  도구를 호출하지 말고, 다음과 같이 솔직하게 답변하세요:
+  "죄송합니다. 저는 고속도로 물류 취약성 및 유류충격 분석에 특화된 에이전트라, 해당 질문에는 답변하기 어렵습니다.
+   경유가 예측, 취약 영업소 분석, LISA 클러스터, 시나리오 비교 등에 대해 질문해 주세요."
+
+### 3. 심층 질문 처리
+- 단순 수치 조회가 아닌 원인 분석, 정책 제언, 상관관계, 시사점 등을 묻는 심층 질문에는
+  다음 구조로 깊이 있게 답변하세요:
+  1) 데이터 기반 핵심 수치 제시
+  2) 패턴·원인 분석 (왜 이런 결과가 나왔는가)
+  3) 상관관계·인과 해석
+  4) 정책·운영 시사점 및 구체적 권고안
+- 추론 과정을 단계별로 명시하고, 불확실한 부분은 "데이터상 단정하기 어렵지만"으로 명시하세요.
+
+### 4. 응답 형식
+- 한국어로 답변하세요.
+- 수치는 반드시 단위와 함께 표기하세요 (원/L, %, 개소 등).
+- 핵심 수치는 **굵게** 강조하세요."""
 
 
 def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> str:
@@ -1246,12 +1269,19 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df):
         {"role": "user",   "content": query},
     ]
 
+    # 심층 질문 키워드 감지 → 응답 토큰 및 분석 깊이 조절
+    _deep_keywords = ["왜", "원인", "이유", "상관", "관계", "정책", "권고", "시사점",
+                      "어떻게", "분석해", "비교해", "해석", "영향", "전망", "대책", "방안"]
+    is_deep = any(kw in query for kw in _deep_keywords)
+    max_tokens = 2048 if is_deep else 1024
+
     # ── 1차 호출: GPT가 도구 선택 ──
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=messages,
         tools=_LLM_TOOLS,
         tool_choice="auto",
+        max_tokens=max_tokens,
     )
 
     msg = response.choices[0].message
@@ -1272,13 +1302,26 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df):
                 "content":      result,
             })
 
+        # 심층 질문이면 더 깊이 분석하도록 추가 지시
+        if is_deep:
+            messages.append({
+                "role": "user",
+                "content": (
+                    "위 데이터를 바탕으로 심층 분석을 수행하세요. "
+                    "① 핵심 수치 요약 ② 패턴·원인 분석 ③ 상관관계 해석 "
+                    "④ 정책·운영 권고안 순서로 구체적으로 답변하세요."
+                ),
+            })
+
         # ── 2차 호출: 도구 결과 → 최종 응답 생성 ──
         final = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
+            max_tokens=max_tokens,
         )
         ans = final.choices[0].message.content or "응답 생성에 실패했습니다."
     else:
+        # 도구를 호출하지 않은 경우 = 범위 밖 질문이거나 직접 답변 가능한 경우
         ans = msg.content or "응답 생성에 실패했습니다."
 
     steps.append(("💬 최종 응답", ans, None))
@@ -1921,11 +1964,7 @@ def main():
                 if msg["role"] == "user":
                     chat_html += f'<div class="msg-user">{msg["content"]}</div>'
                 else:
-                    think_html = ""
-                    if msg.get("thinking"):
-                        for stype, sdata, _ in msg["thinking"]:
-                            if stype != "💬 최종 응답":
-                                think_html += f'<div class="think-step"><span class="think-label">{stype}</span> → {sdata}</div>'
+                    think_html = ""  # 추론 단계 UI 미표시
                     content = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>',
                                      msg["content"].replace("\n","<br>"))
                     chat_html += f"""
@@ -2017,20 +2056,25 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-            st.markdown('<div class="sec-head" style="margin-top:18px"><span class="sec-head-title">분석 컨텍스트</span></div>', unsafe_allow_html=True)
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            for k, v in [
-                ("영업소 수", f"{len(impact_df):,}"),
-                ("Very High", f"{vh_count}개소"),
-                ("HH 클러스터", f"{hh_count}개소"),
-                ("Shock Index", f"{mean_shock:.4f}"),
-                ("최고 예측가", f"{forecast_df['ensemble'].max():.0f}원"),
-                ("WTI", f"${energy_df['wti'].iloc[-1]:.2f}"),
-                ("USD/KRW", f"₩{energy_df['usd_krw'].iloc[-1]:,.0f}"),
-                ("VIX", f"{energy_df['vix'].iloc[-1]:.2f}"),
-            ]:
-                st.markdown(f'<div class="ctx-row"><span class="ctx-key">{k}</span><span class="ctx-val">{v}</span></div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            _ctx_rows = "".join(
+                f'<div class="ctx-row"><span class="ctx-key">{k}</span><span class="ctx-val">{v}</span></div>'
+                for k, v in [
+                    ("영업소 수",   f"{len(impact_df):,}"),
+                    ("Very High",  f"{vh_count}개소"),
+                    ("HH 클러스터", f"{hh_count}개소"),
+                    ("Shock Index", f"{mean_shock:.4f}"),
+                    ("최고 예측가", f"{forecast_df['ensemble'].max():.0f}원"),
+                    ("WTI",        f"${energy_df['wti'].iloc[-1]:.2f}"),
+                    ("USD/KRW",    f"₩{energy_df['usd_krw'].iloc[-1]:,.0f}"),
+                    ("VIX",        f"{energy_df['vix'].iloc[-1]:.2f}"),
+                ]
+            )
+            st.markdown(f"""
+            <div class="sec-head" style="margin-top:18px">
+              <span class="sec-head-title">분석 컨텍스트</span>
+            </div>
+            <div class="card">{_ctx_rows}</div>
+            """, unsafe_allow_html=True)
 
             st.markdown('<div class="sec-head" style="margin-top:18px"><span class="sec-head-title">추론 체계</span></div>', unsafe_allow_html=True)
             st.markdown("""
