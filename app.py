@@ -2127,6 +2127,7 @@ def main():
                 st.session_state.chat_history.append({
                     "role":"agent","content":steps[-1][1],"thinking":steps[:-1],
                 })
+                st.session_state["agent_input"] = ""  # 입력창 초기화
                 st.rerun()
 
         with ag2:
