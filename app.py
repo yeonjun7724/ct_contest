@@ -268,6 +268,11 @@ section[data-testid="stSidebar"] [data-baseweb="select"] > div {
 [data-testid="stSlider"] [data-baseweb="slider"] [role="slider"] { background:var(--accent) !important; border-color:var(--accent) !important; }
 hr { border-color:var(--border) !important; margin:20px 0 !important; }
 
+/* ── HIDE STREAMLIT KEYBOARD SHORTCUT HINTS ── */
+[data-testid="InputInstructions"],
+[class*="keyboard"],
+[data-baseweb="input"] ~ div[aria-hidden="true"] { display:none !important; }
+
 /* ── MINI STAT CARDS ── */
 .mini-stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; text-align:center; box-shadow:var(--shadow-sm); }
 .mini-stat-val { font-family:var(--mono); font-size:22px; font-weight:500; margin-bottom:4px; }
@@ -1099,7 +1104,7 @@ _LLM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "경유가_예측_조회",
+            "name": "forecast_diesel",
             "description": "30일 경유가 앙상블 예측(Prophet+LSTM) 결과 및 Diesel Shock Index 등급 분포를 조회합니다.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -1107,13 +1112,13 @@ _LLM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "취약성_랭킹_조회",
+            "name": "rank_vulnerability",
             "description": "전국 영업소 Vulnerability Score 및 Impact Score 기준 상위/하위 N개 영업소를 반환합니다.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "top_n":  {"type": "integer", "description": "반환할 영업소 수 (기본 5)"},
-                    "order":  {"type": "string",  "enum": ["상위", "하위"], "description": "상위 또는 하위"},
+                    "order":  {"type": "string",  "enum": ["top", "bottom"], "description": "top=상위, bottom=하위"},
                     "metric": {"type": "string",  "enum": ["impact", "vulnerability"], "description": "정렬 기준 지표"},
                 },
                 "required": [],
@@ -1123,12 +1128,12 @@ _LLM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "노선별_위험_분석",
+            "name": "route_risk_analysis",
             "description": "특정 노선(또는 전체 노선)의 평균 Impact Score, 등급 분포, Very High 영업소 수를 분석합니다.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "route_name": {"type": "string", "description": "노선명 (예: 경부선). 생략 시 상위 10개 노선 전체 반환"},
+                    "route_name": {"type": "string", "description": "노선명 (예: 경부선). 생략 시 상위 10개 노선 반환"},
                 },
                 "required": [],
             },
@@ -1137,7 +1142,7 @@ _LLM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "LISA_클러스터_조회",
+            "name": "lisa_cluster",
             "description": "LISA(Local Moran's I) 공간 자기상관 분석 결과 — High-High 클러스터 영업소 목록과 통계를 반환합니다.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -1145,7 +1150,7 @@ _LLM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "시나리오_비교",
+            "name": "scenario_compare",
             "description": "기본 시나리오(30일 평균 Shock Index)와 최악 시나리오(30일 최대 Shock Index)에서 Very High 영업소 수 변화를 비교합니다.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -1153,7 +1158,7 @@ _LLM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "전쟁전후_비교",
+            "name": "war_comparison",
             "description": "2026-02-28 전쟁 발발 전후의 화물 교통량 변화율과 화물 비율 변화를 조회합니다.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -1161,7 +1166,7 @@ _LLM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "web_검색",
+            "name": "web_search",
             "description": (
                 "인터넷에서 최신 정보를 검색합니다. "
                 "유가 상승 원인, 전쟁 영향, 물류 정책, 경제 동향 등 "
@@ -1172,7 +1177,7 @@ _LLM_TOOLS = [
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "검색할 키워드 (예: '경유가 상승 원인 2026', '러시아 전쟁 유가 영향')",
+                        "description": "검색할 키워드 (예: diesel price surge cause 2026, Russia war oil impact)",
                     },
                 },
                 "required": ["query"],
@@ -1220,7 +1225,7 @@ _SYSTEM_PROMPT = """당신은 고속도로 물류 취약성·유류충격 분석
 def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> str:
     """도구 이름과 입력값을 받아 실데이터 조회 결과를 문자열로 반환"""
 
-    if name == "경유가_예측_조회":
+    if name == "forecast_diesel":
         f0   = float(forecast_df["ensemble"].iloc[0])
         f1   = float(forecast_df["ensemble"].iloc[-1])
         chg  = (f1 / f0 - 1) * 100
@@ -1238,12 +1243,12 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
             f"최대 변화율: +{forecast_df['change_rate'].max():.2f}%"
         )
 
-    elif name == "취약성_랭킹_조회":
+    elif name == "rank_vulnerability":
         n      = int(tool_input.get("top_n", 5))
         order  = tool_input.get("order", "상위")
         metric = tool_input.get("metric", "impact")
         col    = "impact_score_mean" if metric == "impact" else "vulnerability_score"
-        asc    = (order == "하위")
+        asc    = (order == "bottom")
         top    = impact_df.sort_values(col, ascending=asc).head(n)
         rows   = "\n".join(
             f"{i+1}. {r['unitName']} ({r['routeName']}) — "
@@ -1256,7 +1261,7 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
             f"전체 {len(impact_df)}개소 중 Very High 등급: {vh}개소"
         )
 
-    elif name == "노선별_위험_분석":
+    elif name == "route_risk_analysis":
         route = tool_input.get("route_name", "")
         agg   = impact_df.groupby("routeName").agg(
             mean_impact=("impact_score_mean", "mean"),
@@ -1282,7 +1287,7 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
             )
             return f"[위험 노선 Top 10]\n{rows}"
 
-    elif name == "LISA_클러스터_조회":
+    elif name == "lisa_cluster":
         vc    = impact_df["lisa_cluster"].value_counts()
         hh_df = impact_df[impact_df["lisa_cluster"] == "High-High"].sort_values("impact_score_mean", ascending=False)
         hh_rows = "\n".join(
@@ -1296,7 +1301,7 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
             f"High-High 총 {int(vc.get('High-High', 0))}개소 — 취약 영업소가 공간적으로 군집된 위험 핫스팟"
         )
 
-    elif name == "시나리오_비교":
+    elif name == "scenario_compare":
         mean_si  = float(forecast_df["shock_index"].mean())
         max_si   = float(forecast_df["shock_index"].max())
         scale    = max_si / (mean_si + 1e-8)
@@ -1319,7 +1324,7 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
             f"최악 시나리오에서 고위험 영업소 총 {worst_vh+worst_hi}개소로 확대"
         )
 
-    elif name == "전쟁전후_비교":
+    elif name == "war_comparison":
         g      = tcs_df.groupby("war_period")["freight_traffic"].mean()
         before = float(g.get("전쟁 이전", float("nan")))
         after  = float(g.get("전쟁 이후", float("nan")))
@@ -1337,7 +1342,7 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
             )
         return "전쟁 전후 비교 데이터가 부족합니다."
 
-    elif name == "web_검색":
+    elif name == "web_search":
         query_str = tool_input.get("query", "")
         if not query_str:
             return "검색어를 입력해 주세요."
