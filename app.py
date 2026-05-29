@@ -1935,7 +1935,32 @@ def main():
                       {content}
                     </div>"""
             chat_html += "</div>"
-            st.markdown(chat_html, unsafe_allow_html=True)
+
+            _CHAT_CSS = """
+            <style>
+            * { box-sizing: border-box; }
+            body { margin: 0; font-family: 'DM Sans', Arial, sans-serif; background: transparent; }
+            .chat-wrap { background: #f2f4f8; border-radius: 14px; padding: 16px;
+                         overflow-y: auto; height: 420px; }
+            .msg-user  { background: #2b50d8; border-radius: 12px 12px 3px 12px;
+                         padding: 10px 14px; margin: 8px 0; margin-left: 16%;
+                         font-size: 13px; color: #fff; }
+            .msg-agent { background: #ffffff; border: 1px solid rgba(0,0,0,.08);
+                         border-radius: 12px 12px 12px 3px; padding: 12px 16px;
+                         margin: 8px 0; margin-right: 12%; font-size: 13px;
+                         color: #0f1117; line-height: 1.65;
+                         box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+            .msg-agent-name { font-size: 9px; font-weight: 700; letter-spacing: .1em;
+                              color: #2b50d8; text-transform: uppercase; margin-bottom: 6px; }
+            .think-step { background: #f2f4f8; border: 1px solid rgba(0,0,0,.08);
+                          border-left: 2px solid #2b50d8; border-radius: 0 6px 6px 0;
+                          padding: 5px 10px; margin: 4px 0;
+                          font-family: monospace; font-size: 10px; color: #9aa0b4; }
+            .think-label { color: #2b50d8; font-weight: 500; }
+            </style>
+            """
+            import streamlit.components.v1 as _components
+            _components.html(_CHAT_CSS + chat_html, height=460, scrolling=True)
 
             # quick questions
             st.markdown('<div class="quick-btn-label">빠른 질문</div>', unsafe_allow_html=True)
