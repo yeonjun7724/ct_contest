@@ -1371,16 +1371,18 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df, chat_history=Non
             "⚠️ **openai 패키지 미설치** — Railway에서 requirements.txt를 확인하세요.", None))
         return steps
 
-    try:
-        api_key = os.environ.get("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
-    except Exception as e:
-        steps.append(("💬 최종 응답",
-            f"⚠️ **API 키 로딩 실패** — secrets.toml 또는 Railway Variables를 확인하세요.\n오류: {e}", None))
-        return steps
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("OPENAI_API_KEY", None)
+        except Exception:
+            api_key = None
 
     if not api_key:
         steps.append(("💬 최종 응답",
-            "⚠️ **OPENAI_API_KEY가 비어있습니다** — Railway Variables에 키를 설정하세요.", None))
+            "⚠️ **OPENAI_API_KEY가 설정되지 않았습니다.**\n\n"
+            "Railway 대시보드 → 프로젝트 → **Variables** 탭에서\n"
+            "`OPENAI_API_KEY = sk-proj-...` 를 추가하세요.", None))
         return steps
 
     try:
@@ -1592,7 +1594,12 @@ def main():
 
         # ── AI 엔진 상태 표시 ──
         try:
-            _sb_key = os.environ.get("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
+            _sb_key = os.environ.get("OPENAI_API_KEY")
+            if not _sb_key:
+                try:
+                    _sb_key = st.secrets.get("OPENAI_API_KEY", None)
+                except Exception:
+                    _sb_key = None
         except Exception:
             _sb_key = None
         _llm_ok = _OPENAI_AVAILABLE and bool(_sb_key)
