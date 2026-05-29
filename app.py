@@ -12,6 +12,12 @@ from datetime import datetime, timedelta
 import warnings, time, json, os, base64
 warnings.filterwarnings("ignore")
 
+try:
+    import openai
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
+
 # ── 페이지 설정 ─────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="고속도로 물류 취약성 분석 시스템",
@@ -275,12 +281,12 @@ hr { border-color:var(--border) !important; margin:20px 0 !important; }
 
 # AI 에이전트 툴 정의 (ReAct 패턴 · 6 Tools)
 AGENT_TOOLS = {
-    "forecast_diesel":   "경유가 30일 예측 (Prophet+LSTM 앙상블)",
-    "rank_vulnerability":"영업소 취약성 랭킹 조회",
-    "lisa_cluster":      "LISA 공간 자기상관 클러스터 분석",
-    "war_comparison":    "전쟁 전후 교통량·화물 비중 비교",
-    "shock_index":       "Diesel Shock Index 산출·등급화",
-    "scenario_compare":  "유가 시나리오별 충격 영향 비교",
+    "경유가_예측_조회":  "30일 경유가 앙상블 예측 및 Diesel Shock Index 조회",
+    "취약성_랭킹_조회":  "전국 영업소 Vulnerability Score 상위/하위 N개 반환",
+    "노선별_위험_분석":  "특정 노선의 평균 Impact Score 및 등급 분포 분석",
+    "LISA_클러스터_조회":"High-High 공간 클러스터 영업소 목록·통계 반환",
+    "시나리오_비교":     "기본·최악 시나리오의 Very High 영업소 수 차이 비교",
+    "전쟁전후_비교":     "전쟁 전후 화물 교통량 변화율 및 주요 변화 영업소 조회",
 }
 
 def _find_file(*names):
@@ -1015,6 +1021,271 @@ def agent_think(query, impact_df, forecast_df, tcs_df):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  LogisAI — Anthropic API Tool Calling 기반 에이전트 (PDF 기획서 구현)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_LLM_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "경유가_예측_조회",
+            "description": "30일 경유가 앙상블 예측(Prophet+LSTM) 결과 및 Diesel Shock Index 등급 분포를 조회합니다.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "취약성_랭킹_조회",
+            "description": "전국 영업소 Vulnerability Score 및 Impact Score 기준 상위/하위 N개 영업소를 반환합니다.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "top_n":  {"type": "integer", "description": "반환할 영업소 수 (기본 5)"},
+                    "order":  {"type": "string",  "enum": ["상위", "하위"], "description": "상위 또는 하위"},
+                    "metric": {"type": "string",  "enum": ["impact", "vulnerability"], "description": "정렬 기준 지표"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "노선별_위험_분석",
+            "description": "특정 노선(또는 전체 노선)의 평균 Impact Score, 등급 분포, Very High 영업소 수를 분석합니다.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "route_name": {"type": "string", "description": "노선명 (예: 경부선). 생략 시 상위 10개 노선 전체 반환"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "LISA_클러스터_조회",
+            "description": "LISA(Local Moran's I) 공간 자기상관 분석 결과 — High-High 클러스터 영업소 목록과 통계를 반환합니다.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "시나리오_비교",
+            "description": "기본 시나리오(30일 평균 Shock Index)와 최악 시나리오(30일 최대 Shock Index)에서 Very High 영업소 수 변화를 비교합니다.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "전쟁전후_비교",
+            "description": "2026-02-28 전쟁 발발 전후의 화물 교통량 변화율과 화물 비율 변화를 조회합니다.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+]
+
+_SYSTEM_PROMPT = """당신은 고속도로 물류 취약성·유류충격 분석 전문 AI 에이전트 'LogisAI'입니다.
+
+분석 데이터 맥락:
+- 분석 대상: 전국 고속도로 영업소 374개소 (좌표 확보)
+- 분석 기간: 2025.01 – 2026.05 (TCS 실측 데이터)
+- 전쟁 발발: 2026-02-28 (러-우 확전 → 유가 급등 시나리오)
+- 핵심 모델: Model A (Prophet+LSTM 앙상블 경유가 30일 예측) + Model B (Vulnerability Score)
+- 핵심 지표: Fuel Shock Impact Score = Vulnerability Score × Diesel Shock Index
+
+도구를 반드시 호출하여 실제 데이터를 조회한 뒤, 수치와 정책적 시사점을 포함한 한국어 브리핑으로 답변하세요.
+응답은 핵심 수치 → 해석 → 정책 시사점 순서로 구성하세요."""
+
+
+def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> str:
+    """도구 이름과 입력값을 받아 실데이터 조회 결과를 문자열로 반환"""
+
+    if name == "경유가_예측_조회":
+        f0   = float(forecast_df["ensemble"].iloc[0])
+        f1   = float(forecast_df["ensemble"].iloc[-1])
+        chg  = (f1 / f0 - 1) * 100
+        peak = float(forecast_df["ensemble"].max())
+        peak_date = str(forecast_df.loc[forecast_df["ensemble"].idxmax(), "date"])[:10]
+        crit = int((forecast_df["risk_level"] == "CRITICAL").sum())
+        high = int((forecast_df["risk_level"] == "HIGH").sum())
+        med  = int((forecast_df["risk_level"] == "MEDIUM").sum())
+        low  = int((forecast_df["risk_level"] == "LOW").sum())
+        return (
+            f"예측 시작가: {f0:,.0f}원/L → 종료가: {f1:,.0f}원/L ({chg:+.2f}%)\n"
+            f"최고 예측가: {peak:,.0f}원/L ({peak_date})\n"
+            f"위험등급 분포 — CRITICAL: {crit}일 / HIGH: {high}일 / MEDIUM: {med}일 / LOW: {low}일 (총 {len(forecast_df)}일)\n"
+            f"Shock Index 평균: {forecast_df['shock_index'].mean():.4f} / 최대: {forecast_df['shock_index'].max():.4f}\n"
+            f"최대 변화율: +{forecast_df['change_rate'].max():.2f}%"
+        )
+
+    elif name == "취약성_랭킹_조회":
+        n      = int(tool_input.get("top_n", 5))
+        order  = tool_input.get("order", "상위")
+        metric = tool_input.get("metric", "impact")
+        col    = "impact_score_mean" if metric == "impact" else "vulnerability_score"
+        asc    = (order == "하위")
+        top    = impact_df.sort_values(col, ascending=asc).head(n)
+        rows   = "\n".join(
+            f"{i+1}. {r['unitName']} ({r['routeName']}) — "
+            f"Impact {r['impact_score_mean']:.4f} / Vuln {r['vulnerability_score']:.4f} / {r['impact_grade']} / LISA:{r['lisa_cluster']}"
+            for i, (_, r) in enumerate(top.iterrows())
+        )
+        vh = int((impact_df["impact_grade"] == "Very High").sum())
+        return (
+            f"[{order} {n}개소 / 정렬기준: {metric}]\n{rows}\n\n"
+            f"전체 {len(impact_df)}개소 중 Very High 등급: {vh}개소"
+        )
+
+    elif name == "노선별_위험_분석":
+        route = tool_input.get("route_name", "")
+        agg   = impact_df.groupby("routeName").agg(
+            mean_impact=("impact_score_mean", "mean"),
+            count=("unitCode", "count"),
+            vh=("impact_grade", lambda x: (x == "Very High").sum()),
+            hi=("impact_grade", lambda x: (x == "High").sum()),
+        ).reset_index()
+
+        if route:
+            matched = agg[agg["routeName"].str.contains(route, na=False)]
+            if matched.empty:
+                return f"'{route}' 노선을 찾을 수 없습니다. 전체 노선: {', '.join(agg['routeName'].unique()[:10])}"
+            rows = "\n".join(
+                f"{r['routeName']}: Impact평균 {r['mean_impact']:.4f} / 영업소 {int(r['count'])}개 / VH {int(r['vh'])}개 / High {int(r['hi'])}개"
+                for _, r in matched.iterrows()
+            )
+            return f"[{route} 노선 분석]\n{rows}"
+        else:
+            top10 = agg.sort_values("mean_impact", ascending=False).head(10)
+            rows  = "\n".join(
+                f"{i+1}. {r['routeName']}: Impact평균 {r['mean_impact']:.4f} / 영업소 {int(r['count'])}개 / VH {int(r['vh'])}개"
+                for i, (_, r) in enumerate(top10.iterrows())
+            )
+            return f"[위험 노선 Top 10]\n{rows}"
+
+    elif name == "LISA_클러스터_조회":
+        vc    = impact_df["lisa_cluster"].value_counts()
+        hh_df = impact_df[impact_df["lisa_cluster"] == "High-High"].sort_values("impact_score_mean", ascending=False)
+        hh_rows = "\n".join(
+            f"  · {r['unitName']} ({r['routeName']}) Impact {r['impact_score_mean']:.4f}"
+            for _, r in hh_df.head(10).iterrows()
+        )
+        cluster_summary = "\n".join(f"  {k}: {v}개소" for k, v in vc.items())
+        return (
+            f"[LISA 클러스터 분포]\n{cluster_summary}\n\n"
+            f"[High-High 핫스팟 상위 10개소]\n{hh_rows}\n\n"
+            f"High-High 총 {int(vc.get('High-High', 0))}개소 — 취약 영업소가 공간적으로 군집된 위험 핫스팟"
+        )
+
+    elif name == "시나리오_비교":
+        mean_si  = float(forecast_df["shock_index"].mean())
+        max_si   = float(forecast_df["shock_index"].max())
+        scale    = max_si / (mean_si + 1e-8)
+        worst    = impact_df["impact_score_mean"] * scale
+        q        = worst.quantile([0.50, 0.90, 0.95])
+        def wg(v):
+            if v >= q.iloc[2]:   return "Very High"
+            elif v >= q.iloc[1]: return "High"
+            elif v >= q.iloc[0]: return "Moderate"
+            return "Low"
+        base_vh  = int((impact_df["impact_grade"] == "Very High").sum())
+        worst_vh = int(worst.apply(wg).eq("Very High").sum())
+        base_hi  = int((impact_df["impact_grade"] == "High").sum())
+        worst_hi = int(worst.apply(wg).eq("High").sum())
+        return (
+            f"[기본 시나리오] Shock Index 평균 {mean_si:.4f}\n"
+            f"  Very High: {base_vh}개소 / High: {base_hi}개소\n\n"
+            f"[최악 시나리오] Shock Index 최대 {max_si:.4f} (×{scale:.2f}배)\n"
+            f"  Very High: {worst_vh}개소 (+{worst_vh-base_vh}) / High: {worst_hi}개소 (+{worst_hi-base_hi})\n\n"
+            f"최악 시나리오에서 고위험 영업소 총 {worst_vh+worst_hi}개소로 확대"
+        )
+
+    elif name == "전쟁전후_비교":
+        g      = tcs_df.groupby("war_period")["freight_traffic"].mean()
+        before = float(g.get("전쟁 이전", float("nan")))
+        after  = float(g.get("전쟁 이후", float("nan")))
+        gs     = tcs_df.groupby("war_period")["freight_share"].mean()
+        bs     = float(gs.get("전쟁 이전", float("nan"))) * 100
+        as_    = float(gs.get("전쟁 이후", float("nan"))) * 100
+        if before and after:
+            d = (after / before - 1) * 100
+            return (
+                f"전쟁 이전 일평균 화물: {before:,.0f}대\n"
+                f"전쟁 이후 일평균 화물: {after:,.0f}대 ({d:+.1f}%)\n"
+                f"화물 비율 변화: {bs:.2f}% → {as_:.2f}%\n\n"
+                f"유가 급등 이후 화물 통행이 {'감소' if d < 0 else '증가'}하는 패턴 관측 — "
+                f"물류비 부담 증가로 {'운행 억제' if d < 0 else '물량 증가'} 현상 추정"
+            )
+        return "전쟁 전후 비교 데이터가 부족합니다."
+
+    return f"'{name}' 도구 실행 결과 없음"
+
+
+def agent_think_llm(query: str, impact_df, forecast_df, tcs_df):
+    """
+    OpenAI API Tool Calling 기반 ReAct 에이전트.
+    API 키 미설정 시 규칙 기반 agent_think()로 자동 폴백.
+    반환: [(라벨, 텍스트, None), ...]  — 마지막 튜플이 최종 응답.
+    """
+    if not _OPENAI_AVAILABLE:
+        return agent_think(query, impact_df, forecast_df, tcs_df)
+
+    api_key = os.environ.get("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
+    if not api_key:
+        return agent_think(query, impact_df, forecast_df, tcs_df)
+
+    client = openai.OpenAI(api_key=api_key)
+    steps  = [("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None)]
+
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user",   "content": query},
+    ]
+
+    # ── 1차 호출: GPT가 도구 선택 ──
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+        tools=_LLM_TOOLS,
+        tool_choice="auto",
+    )
+
+    msg = response.choices[0].message
+
+    # ── 도구 호출 처리 ──
+    if msg.tool_calls:
+        messages.append(msg)
+
+        for tc in msg.tool_calls:
+            tool_name  = tc.function.name
+            tool_input = json.loads(tc.function.arguments) if tc.function.arguments else {}
+            steps.append(("🧠 추론(Think)", f"도구 선택 → `{tool_name}`", None))
+            result = _exec_tool(tool_name, tool_input, impact_df, forecast_df, tcs_df)
+            steps.append(("⚡ 실행(Act)", f"`{tool_name}` 실행 완료", None))
+            messages.append({
+                "role":         "tool",
+                "tool_call_id": tc.id,
+                "content":      result,
+            })
+
+        # ── 2차 호출: 도구 결과 → 최종 응답 생성 ──
+        final = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+        )
+        ans = final.choices[0].message.content or "응답 생성에 실패했습니다."
+    else:
+        ans = msg.content or "응답 생성에 실패했습니다."
+
+    steps.append(("💬 최종 응답", ans, None))
+    return steps
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  메인 UI
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1698,8 +1969,7 @@ def main():
             if query:
                 st.session_state.chat_history.append({"role":"user","content":query,"thinking":None})
                 with st.spinner("분석 중…"):
-                    time.sleep(0.6)
-                    steps = agent_think(query, impact_df, forecast_df, tcs_df)
+                    steps = agent_think_llm(query, impact_df, forecast_df, tcs_df)
                 st.session_state.chat_history.append({
                     "role":"agent","content":steps[-1][1],"thinking":steps[:-1],
                 })
@@ -1707,9 +1977,9 @@ def main():
 
         with ag2:
             st.markdown('<div class="sec-head"><span class="sec-head-title">사용 가능 도구</span></div>', unsafe_allow_html=True)
-            TICONS = {"forecast_diesel":"📈","rank_vulnerability":"🏆",
-                      "lisa_cluster":"🗺️","war_comparison":"⚔️",
-                      "shock_index":"⚡","scenario_compare":"⚖️"}
+            TICONS = {"경유가_예측_조회":"📈","취약성_랭킹_조회":"🏆",
+                      "노선별_위험_분석":"🛣️","LISA_클러스터_조회":"🗺️",
+                      "시나리오_비교":"⚖️","전쟁전후_비교":"⚔️"}
             for name, desc in AGENT_TOOLS.items():
                 icon = TICONS.get(name,"🔧")
                 st.markdown(f"""
