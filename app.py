@@ -2129,9 +2129,12 @@ def main():
                         st.rerun()
 
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            if "input_counter" not in st.session_state:
+                st.session_state["input_counter"] = 0
             user_input = st.text_input("질문 입력",
                 placeholder="예: 경유가 예측 결과 알려줘",
-                key="agent_input", label_visibility="collapsed")
+                key=f"agent_input_{st.session_state['input_counter']}",
+                label_visibility="collapsed")
             sc1, sc2 = st.columns([4,1])
             with sc1:
                 send_btn = st.button("전송 ↗", key="send_btn", use_container_width=True, type="primary")
@@ -2154,7 +2157,7 @@ def main():
                 st.session_state.chat_history.append({
                     "role":"agent","content":steps[-1][1],"thinking":steps[:-1],
                 })
-                st.session_state["agent_input"] = ""  # 입력창 초기화
+                st.session_state["input_counter"] += 1  # 입력창 초기화
                 st.rerun()
 
         with ag2:
