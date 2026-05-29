@@ -1364,18 +1364,30 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df, chat_history=Non
     API 키 미설정 시 규칙 기반 agent_think()로 자동 폴백.
     반환: [(라벨, 텍스트, None), ...]  — 마지막 튜플이 최종 응답.
     """
+    steps = [("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None)]
+
     if not _OPENAI_AVAILABLE:
-        return agent_think(query, impact_df, forecast_df, tcs_df)
+        steps.append(("💬 최종 응답",
+            "⚠️ **openai 패키지 미설치** — Railway에서 requirements.txt를 확인하세요.", None))
+        return steps
 
     try:
         api_key = os.environ.get("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
-    except Exception:
-        api_key = None
-    if not api_key:
-        return agent_think(query, impact_df, forecast_df, tcs_df)
+    except Exception as e:
+        steps.append(("💬 최종 응답",
+            f"⚠️ **API 키 로딩 실패** — secrets.toml 또는 Railway Variables를 확인하세요.\n오류: {e}", None))
+        return steps
 
-    client = openai.OpenAI(api_key=api_key)
-    steps  = [("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None)]
+    if not api_key:
+        steps.append(("💬 최종 응답",
+            "⚠️ **OPENAI_API_KEY가 비어있습니다** — Railway Variables에 키를 설정하세요.", None))
+        return steps
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+    except Exception as e:
+        steps.append(("💬 최종 응답", f"⚠️ **OpenAI 클라이언트 초기화 실패**: {e}", None))
+        return steps
 
     # ── 범위 밖 사전 차단 (API 호출 전) ──
     if _is_out_of_scope(query):
@@ -1418,43 +1430,46 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df, chat_history=Non
         {"role": "user",   "content": user_content},
     ]
 
-    # ── 1차 호출: GPT가 도구 선택 ──
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        tools=_LLM_TOOLS,
-        tool_choice="auto",
-        max_tokens=512,
-    )
-
-    msg = response.choices[0].message
-
-    # ── 도구 호출 처리 ──
-    if msg.tool_calls:
-        messages.append(msg)
-
-        for tc in msg.tool_calls:
-            tool_name  = tc.function.name
-            tool_input = json.loads(tc.function.arguments) if tc.function.arguments else {}
-            steps.append(("🧠 추론(Think)", f"도구 선택 → `{tool_name}`", None))
-            result = _exec_tool(tool_name, tool_input, impact_df, forecast_df, tcs_df)
-            steps.append(("⚡ 실행(Act)", f"`{tool_name}` 실행 완료", None))
-            messages.append({
-                "role":         "tool",
-                "tool_call_id": tc.id,
-                "content":      result,
-            })
-
-        # ── 2차 호출: 도구 결과 → 최종 응답 생성 ──
-        final = client.chat.completions.create(
+    try:
+        # ── 1차 호출: GPT가 도구 선택 ──
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
-            max_tokens=2048 if is_deep else 1024,
+            tools=_LLM_TOOLS,
+            tool_choice="auto",
+            max_tokens=512,
         )
-        ans = final.choices[0].message.content or "응답 생성에 실패했습니다."
-    else:
-        # 도구 미호출 = 범위 밖 질문 또는 직접 답변
-        ans = msg.content or "응답 생성에 실패했습니다."
+
+        msg = response.choices[0].message
+
+        # ── 도구 호출 처리 ──
+        if msg.tool_calls:
+            messages.append(msg)
+
+            for tc in msg.tool_calls:
+                tool_name  = tc.function.name
+                tool_input = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                steps.append(("🧠 추론(Think)", f"도구 선택 → `{tool_name}`", None))
+                result = _exec_tool(tool_name, tool_input, impact_df, forecast_df, tcs_df)
+                steps.append(("⚡ 실행(Act)", f"`{tool_name}` 실행 완료", None))
+                messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tc.id,
+                    "content":      result,
+                })
+
+            # ── 2차 호출: 도구 결과 → 최종 응답 생성 ──
+            final = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=2048 if is_deep else 1024,
+            )
+            ans = final.choices[0].message.content or "응답 생성에 실패했습니다."
+        else:
+            ans = msg.content or "응답 생성에 실패했습니다."
+
+    except Exception as e:
+        ans = f"⚠️ **GPT 호출 오류**: {e}"
 
     steps.append(("💬 최종 응답", ans, None))
     return steps
