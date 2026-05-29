@@ -1555,9 +1555,23 @@ def main():
       <div class="topbar-pill">
         <div class="topbar-pill-dot"></div>
         <span class="topbar-pill-label">LIVE</span>
-        <span class="topbar-pill-time">{datetime.now().strftime('%H:%M')} KST</span>
+        <span class="topbar-pill-time" id="live-clock">--:-- KST</span>
       </div>
     </div>
+    <script>
+    (function() {
+      function updateClock() {
+        var now = new Date();
+        var h = String(now.getHours()).padStart(2, '0');
+        var m = String(now.getMinutes()).padStart(2, '0');
+        var s = String(now.getSeconds()).padStart(2, '0');
+        var el = document.getElementById('live-clock');
+        if (el) el.textContent = h + ':' + m + ':' + s + ' KST';
+      }
+      updateClock();
+      setInterval(updateClock, 1000);
+    })();
+    </script>
     """, unsafe_allow_html=True)
 
     # ── ALERT BANNERS ─────────────────────────────────────────────────────────
