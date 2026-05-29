@@ -633,7 +633,13 @@ def chart_tcs_war_comparison(tcs_df):
             marker=dict(size=7, color=color),
         ))
 
-    return dark_layout(fig, "전쟁 전후 요일별 화물 교통량", h=280)
+    dark_layout(fig, "전쟁 전후 요일별 화물 교통량", h=300)
+    fig.update_layout(
+        margin=dict(l=20, r=20, t=50, b=55),
+        legend=dict(orientation="h", yanchor="top", y=-0.18,
+                    xanchor="center", x=0.5, bgcolor="rgba(0,0,0,0)"),
+    )
+    return fig
 
 
 def chart_lisa_donut(impact_df):
@@ -674,7 +680,13 @@ def chart_impact_scatter(impact_df):
             customdata=d[["unitName","routeName"]].values,
             hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br>취약성: %{x:.4f}<br>충격: %{y:.4f}<extra></extra>"))
 
-    return dark_layout(fig, "취약성 vs 충격 점수 산점도", h=300)
+    dark_layout(fig, "취약성 vs 충격 점수 산점도", h=320)
+    fig.update_layout(
+        margin=dict(l=20, r=20, t=50, b=55),
+        legend=dict(orientation="h", yanchor="top", y=-0.18,
+                    xanchor="center", x=0.5, bgcolor="rgba(0,0,0,0)"),
+    )
+    return fig
 
 
 
@@ -1641,23 +1653,9 @@ def main():
       <div class="topbar-pill">
         <div class="topbar-pill-dot"></div>
         <span class="topbar-pill-label">LIVE</span>
-        <span class="topbar-pill-time" id="live-clock">--:-- KST</span>
+        <span class="topbar-pill-time">{datetime.now().strftime('%H:%M')} KST</span>
       </div>
     </div>
-    <script>
-    (function() {{
-      function updateClock() {{
-        var now = new Date();
-        var h = String(now.getHours()).padStart(2, '0');
-        var m = String(now.getMinutes()).padStart(2, '0');
-        var s = String(now.getSeconds()).padStart(2, '0');
-        var el = document.getElementById('live-clock');
-        if (el) el.textContent = h + ':' + m + ':' + s + ' KST';
-      }}
-      updateClock();
-      setInterval(updateClock, 1000);
-    }})();
-    </script>
     """, unsafe_allow_html=True)
 
     # ── ALERT BANNERS ─────────────────────────────────────────────────────────
