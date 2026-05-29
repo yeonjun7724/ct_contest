@@ -507,7 +507,20 @@ def chart_forecast(forecast_df):
             fillcolor=color_map.get(row["risk_level"], "#58a6ff"),
             opacity=0.06, line_width=0)
 
-    return dark_layout(fig, "30일 경유가 앙상블 예측", h=300)
+    dark_layout(fig, "30일 경유가 앙상블 예측", h=320)
+    fig.update_layout(
+        margin=dict(l=20, r=20, t=50, b=60),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.18,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=10, color=DARK["text"]),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+    )
+    return fig
 
 
 def chart_shock_index(forecast_df):
@@ -1559,18 +1572,18 @@ def main():
       </div>
     </div>
     <script>
-    (function() {
-      function updateClock() {
+    (function() {{
+      function updateClock() {{
         var now = new Date();
         var h = String(now.getHours()).padStart(2, '0');
         var m = String(now.getMinutes()).padStart(2, '0');
         var s = String(now.getSeconds()).padStart(2, '0');
         var el = document.getElementById('live-clock');
         if (el) el.textContent = h + ':' + m + ':' + s + ' KST';
-      }
+      }}
       updateClock();
       setInterval(updateClock, 1000);
-    })();
+    }})();
     </script>
     """, unsafe_allow_html=True)
 
