@@ -1294,7 +1294,10 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df, chat_history=Non
     if not _OPENAI_AVAILABLE:
         return agent_think(query, impact_df, forecast_df, tcs_df)
 
-    api_key = os.environ.get("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
+    try:
+        api_key = os.environ.get("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        api_key = None
     if not api_key:
         return agent_think(query, impact_df, forecast_df, tcs_df)
 
@@ -1498,6 +1501,22 @@ def main():
         st.markdown('<div class="sb-section">Forecast config</div>', unsafe_allow_html=True)
         forecast_horizon = st.slider("예측 기간 (일)", 7, 30, 30)
         prophet_weight   = st.slider("Prophet 가중치", 0.1, 0.9, 0.4, step=0.05)
+
+        # ── AI 엔진 상태 표시 ──
+        try:
+            _sb_key = os.environ.get("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
+        except Exception:
+            _sb_key = None
+        _llm_ok = _OPENAI_AVAILABLE and bool(_sb_key)
+        st.markdown(
+            f'<div class="sb-section">AI Engine</div>'
+            f'<div style="font-size:11px;padding:6px 0 12px">'
+            f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;'
+            f'background:{"#1a7f4b" if _llm_ok else "#d93025"};margin-right:6px"></span>'
+            f'{"GPT-4o 연결됨" if _llm_ok else "API 키 없음 — 규칙 기반 모드"}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
         st.markdown('<div class="sb-section">Dataset</div>', unsafe_allow_html=True)
         st.markdown(f"""
