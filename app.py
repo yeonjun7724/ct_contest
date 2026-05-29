@@ -905,11 +905,48 @@ def _classify_intent(q: str) -> str:
     return best if scores[best] > 0 else "forecast_diesel"
 
 
+_OOS_KEYWORDS = [
+    "날씨", "기온", "비", "눈", "맑음", "흐림", "태풍",
+    "주식", "코스피", "코스닥", "증권", "펀드", "비트코인",
+    "음식", "맛집", "레스토랑", "요리", "레시피",
+    "영화", "드라마", "예능", "연예인", "아이돌",
+    "스포츠", "야구", "축구", "농구", "골프",
+    "로또", "복권", "카지노",
+    "여행", "관광", "호텔", "항공",
+    "게임", "쇼핑", "패션", "뷰티",
+]
+_IN_SCOPE_KEYWORDS = [
+    "경유", "유가", "디젤", "영업소", "취약", "화물", "교통",
+    "노선", "충격", "shock", "lisa", "시나리오", "전쟁",
+    "물류", "고속도로", "예측", "분석", "위험", "cluster",
+    "vulnerability", "impact", "경부", "서해안", "중부",
+]
+_OOS_REPLY = (
+    "죄송합니다. 저는 **고속도로 물류 취약성 및 유류충격 분석**에 특화된 에이전트라 "
+    "해당 질문에는 답변하기 어렵습니다.\n\n"
+    "아래와 같은 질문을 시도해 보세요:\n"
+    "- 경유가 30일 예측 결과 알려줘\n"
+    "- 취약성 상위 영업소는 어디야?\n"
+    "- 전쟁 전후 화물량 변화 분석해줘\n"
+    "- 경부선 위험도 왜 높아?"
+)
+
+
+def _is_out_of_scope(query: str) -> bool:
+    has_oos      = any(kw in query for kw in _OOS_KEYWORDS)
+    has_in_scope = any(kw in query.lower() for kw in _IN_SCOPE_KEYWORDS)
+    return has_oos and not has_in_scope
+
+
 def agent_think(query, impact_df, forecast_df, tcs_df):
     """
     규칙 기반 분석 에이전트. 실데이터프레임만 조회하여 실수치로 응답.
     반환: [(라벨, 텍스트, None), ...]  — 마지막 튜플이 최종 응답.
     """
+    if _is_out_of_scope(query):
+        return [("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None),
+                ("💬 최종 응답", _OOS_REPLY, None)]
+
     tool = _classify_intent(query)
     tool_label = AGENT_TOOLS.get(tool, tool)
 
@@ -1248,7 +1285,7 @@ def _exec_tool(name: str, tool_input: dict, impact_df, forecast_df, tcs_df) -> s
     return f"'{name}' 도구 실행 결과 없음"
 
 
-def agent_think_llm(query: str, impact_df, forecast_df, tcs_df):
+def agent_think_llm(query: str, impact_df, forecast_df, tcs_df, chat_history=None):
     """
     OpenAI API Tool Calling 기반 ReAct 에이전트.
     API 키 미설정 시 규칙 기반 agent_think()로 자동 폴백.
@@ -1265,30 +1302,8 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df):
     steps  = [("🔍 관찰(Observe)", f"질문 의도 분석 — '{query}'", None)]
 
     # ── 범위 밖 사전 차단 (API 호출 전) ──
-    _oos = ["날씨", "기온", "비", "눈", "맑음", "흐림", "태풍",
-            "주식", "코스피", "코스닥", "증권", "펀드", "비트코인",
-            "음식", "맛집", "레스토랑", "요리", "레시피",
-            "영화", "드라마", "예능", "연예인", "아이돌",
-            "스포츠", "야구", "축구", "농구", "골프",
-            "로또", "복권", "카지노",
-            "여행", "관광", "호텔", "항공",
-            "게임", "쇼핑", "패션", "뷰티"]
-    _in_scope = ["경유", "유가", "디젤", "영업소", "취약", "화물", "교통",
-                 "노선", "충격", "shock", "lisa", "시나리오", "전쟁",
-                 "물류", "고속도로", "예측", "분석", "위험", "cluster",
-                 "vulnerability", "impact", "경부", "서해안", "중부"]
-
-    _has_oos      = any(kw in query for kw in _oos)
-    _has_in_scope = any(kw in query.lower() for kw in _in_scope)
-
-    if _has_oos and not _has_in_scope:
-        steps.append(("💬 최종 응답",
-            "죄송합니다. 저는 **고속도로 물류 취약성 및 유류충격 분석**에 특화된 에이전트라 해당 질문에는 답변하기 어렵습니다.\n\n"
-            "아래와 같은 질문을 시도해 보세요:\n"
-            "- 경유가 30일 예측 결과 알려줘\n"
-            "- 취약성 상위 영업소는 어디야?\n"
-            "- 전쟁 전후 화물량 변화 분석해줘\n"
-            "- 경부선 위험도 왜 높아?", None))
+    if _is_out_of_scope(query):
+        steps.append(("💬 최종 응답", _OOS_REPLY, None))
         return steps
 
     # ── 심층 질문 감지 ──
@@ -1310,8 +1325,20 @@ def agent_think_llm(query: str, impact_df, forecast_df, tcs_df):
             "【정책 권고】구체적이고 실행 가능한 정책·운영 개선 방안"
         )
 
+    # ── 최근 대화 히스토리 구성 (최대 3턴) ──
+    history_messages = []
+    if chat_history:
+        recent = [m for m in chat_history if m["role"] in ("user", "agent")][-7:-1]
+        for m in recent:
+            if m["role"] == "user":
+                history_messages.append({"role": "user", "content": m["content"]})
+            else:
+                short = m["content"][:600] + "..." if len(m["content"]) > 600 else m["content"]
+                history_messages.append({"role": "assistant", "content": short})
+
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
+        *history_messages,
         {"role": "user",   "content": user_content},
     ]
 
@@ -2062,7 +2089,8 @@ def main():
             if query:
                 st.session_state.chat_history.append({"role":"user","content":query,"thinking":None})
                 with st.spinner("분석 중…"):
-                    steps = agent_think_llm(query, impact_df, forecast_df, tcs_df)
+                    steps = agent_think_llm(query, impact_df, forecast_df, tcs_df,
+                                            chat_history=st.session_state.chat_history)
                 st.session_state.chat_history.append({
                     "role":"agent","content":steps[-1][1],"thinking":steps[:-1],
                 })
